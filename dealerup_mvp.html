@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DealerUp — MVP</title>
+<script src="dealerup.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ── Login Screen ── -->
+<div class="login-wrap" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 24 24"><path d="M5 17H3V11L5.5 6H18.5L21 11V17H19C19 18.1 18.1 19 17 19C15.9 19 15 18.1 15 17H9C9 18.1 8.1 19 7 19C5.9 19 5 18.1 5 17ZM17 15.5C17.8 15.5 18.5 16.2 18.5 17C18.5 17.8 17.8 18.5 17 18.5C16.2 18.5 15.5 17.8 15.5 17C15.5 16.2 16.2 15.5 17 15.5ZM7 15.5C7.8 15.5 8.5 16.2 8.5 17C8.5 17.8 7.8 18.5 7 18.5C6.2 18.5 5.5 17.8 5.5 17C5.5 16.2 6.2 15.5 7 15.5ZM6.2 10H17.8L16.2 7H7.8L6.2 10Z"/></svg>
+      </div>
+      DealerUp
+    </div>
+    <div class="login-title">Sign in</div>
+    <div class="login-sub">Springfield Ford Dealership</div>
+    <label>Username</label>
+    <input type="text" id="loginUser" placeholder="admin or employee" />
+    <label>Password</label>
+    <input type="password" id="loginPass" placeholder="password" />
+    <div class="error-msg" id="loginError">Incorrect username or password.</div>
+    <button class="btn-primary" onclick="doLogin()">Sign in</button>
+    <div class="login-hint">
+      Demo credentials:<br>
+      <strong>admin</strong> / admin123 &nbsp;·&nbsp; can add &amp; remove vehicles<br>
+      <strong>employee</strong> / emp123 &nbsp;·&nbsp; view only
+    </div>
+  </div>
+</div>
+
+<!-- ── App ── -->
+<div class="app" id="app">
+  <header>
+    <div class="logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 24 24"><path d="M5 17H3V11L5.5 6H18.5L21 11V17H19C19 18.1 18.1 19 17 19C15.9 19 15 18.1 15 17H9C9 18.1 8.1 19 7 19C5.9 19 5 18.1 5 17ZM17 15.5C17.8 15.5 18.5 16.2 18.5 17C18.5 17.8 17.8 18.5 17 18.5C16.2 18.5 15.5 17.8 15.5 17C15.5 16.2 16.2 15.5 17 15.5ZM7 15.5C7.8 15.5 8.5 16.2 8.5 17C8.5 17.8 7.8 18.5 7 18.5C6.2 18.5 5.5 17.8 5.5 17C5.5 16.2 6.2 15.5 7 15.5ZM6.2 10H17.8L16.2 7H7.8L6.2 10Z"/></svg>
+      </div>
+      DealerUp
+    </div>
+    <div class="header-right">
+      <span id="headerRoleBadge" class="role-badge"></span>
+      <span id="headerUserName" style="font-size:13px;color:var(--muted)"></span>
+      <button class="btn-logout" onclick="doLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Summary -->
+    <!-- TODO: wire these to renderStats() so they reflect live inventory data -->
+    <div class="summary not-implemented">
+      <div class="sum-card">
+        <div class="sum-label">Total vehicles</div>
+        <div class="sum-val" id="statTotal">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Available</div>
+        <div class="sum-val" id="statAvailable">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Sold</div>
+        <div class="sum-val" id="statSold">—</div>
+      </div>
+    </div>
+
+    <!-- Page header -->
+    <div class="page-hdr">
+      <div class="page-title">Inventory</div>
+    </div>
+
+    <!-- TODO banner -->
+    <div class="todo-banner">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>Sprint task: connect <code>inventory</code> data and implement <code>renderTable()</code> and <code>renderStats()</code> to populate this view.</span>
+    </div>
+
+    <!-- Toolbar (disabled until implemented) -->
+    <div class="toolbar not-implemented">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="searchInput" placeholder="Search by make, model, or VIN…" />
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Vehicle</th>
+            <th>VIN</th>
+            <th>Mileage</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th id="actionsHeader"></th>
+          </tr>
+        </thead>
+        <tbody id="inventoryBody">
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <div class="empty-icon">&#9723;</div>
+                <div class="empty-title">Inventory not yet connected</div>
+                <div class="empty-sub">
+                  The <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px">inventory</code> array is defined in the script below.<br>
+                  Implement <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px">renderTable()</code> to display it here.
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- ── Add / Edit Modal ── -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Add vehicle</div>
+    <div class="form-grid">
+      <div>
+        <label>Year</label>
+        <input type="number" id="fYear" placeholder="2024" min="1900" max="2030" />
+      </div>
+      <div>
+        <label>Make</label>
+        <input type="text" id="fMake" placeholder="Ford" />
+      </div>
+      <div class="full">
+        <label>Model</label>
+        <input type="text" id="fModel" placeholder="F-150" />
+      </div>
+      <div class="full">
+        <label>VIN</label>
+        <input type="text" id="fVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
+      </div>
+      <div>
+        <label>Mileage</label>
+        <input type="number" id="fMileage" placeholder="0" min="0" />
+      </div>
+      <div>
+        <label>Price ($)</label>
+        <input type="number" id="fPrice" placeholder="25000" min="0" />
+      </div>
+      <div class="full">
+        <label>Status</label>
+        <select id="fStatus">
+          <option>Available</option>
+          <option>Pending</option>
+          <option>Sold</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveVehicle()">Save</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
