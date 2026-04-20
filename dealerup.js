@@ -40,7 +40,7 @@ function doLogout() {
 document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
 });
-
+ //here
 // ── Inventory data ────────────────────────────────────
 let inventory = [
     { id: 1, year: 2023, make: 'Ford', model: 'F-150', vin: '1FTFW1E80NFA12345', mileage: 12400, price: 38900, status: 'Available' },
