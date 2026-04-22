@@ -1,0 +1,1 @@
+Model folder is for back-backend code. Such as SQL schema, sql interaction/logic, etc.

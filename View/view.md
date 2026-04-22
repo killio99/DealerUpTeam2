@@ -1,0 +1,1 @@
+View folder is for all thing UI ONLY -> not logic code here, just UI build code

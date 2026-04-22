@@ -1,0 +1,1 @@
+viewmodel folder is for UI logic code -> getelementbyId type stuff
