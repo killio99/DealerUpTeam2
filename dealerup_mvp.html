@@ -50,6 +50,13 @@
       <button class="btn-logout" onclick="doLogout()">Sign out</button>
     </div>
   </header>
+<!-- ── Tab Navigation ── -->
+<nav class="tab-nav">
+  <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab-btn active" onclick="switchTab('inventory')">Inventory</button>
+  <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
+  <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
+</nav>
 
   <main>
     <!-- Summary -->
@@ -120,6 +127,96 @@
   </main>
 </div>
 
+<!-- ── Transactions Page ── -->
+<div class="page" id="transactionsPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+  <div class="page-hdr">
+    <div class="page-title">Transactions</div>
+  </div>
+  <div class="todo-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Sprint task: connect transaction data and implement <code>renderTransactions()</code> to populate this view.</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Sale ID</th>
+          <th>Vehicle</th>
+          <th>VIN</th>
+          <th>Customer</th>
+          <th>Salesman</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="transactionsBody">
+        <tr>
+          <td colspan="8">
+            <div class="empty-state">
+              <div class="empty-icon">&#9723;</div>
+              <div class="empty-title">Transactions not yet connected</div>
+              <div class="empty-sub">Implement <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px">renderTransactions()</code> to display sales data here.</div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Dashboard Page ── -->
+<div class="page" id="dashboardPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+  <div class="page-hdr">
+    <div class="page-title">Dashboard</div>
+  </div>
+  <div class="todo-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Sprint task: implement dashboard stats and activity feed.</span>
+  </div>
+  <div class="empty-state">
+    <div class="empty-icon">&#9723;</div>
+    <div class="empty-title">Dashboard coming soon</div>
+    <div class="empty-sub">Summary cards and recent activity will appear here.</div>
+  </div>
+</div>
+
+<!-- ── My Sales Page ── -->
+<div class="page" id="mysalesPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+  <div class="page-hdr">
+    <div class="page-title">My Sales</div>
+  </div>
+  <div class="todo-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Sprint task: connect sales data filtered by current logged-in user.</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Sale ID</th>
+          <th>Vehicle</th>
+          <th>VIN</th>
+          <th>Customer</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="mysalesBody">
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <div class="empty-icon">&#9723;</div>
+              <div class="empty-title">No sales yet</div>
+              <div class="empty-sub">Your completed sales will appear here once connected to the database.</div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <!-- ── Add / Edit Modal ── -->
 <div class="modal-backdrop" id="modal">
   <div class="modal">

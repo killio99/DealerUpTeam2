@@ -138,3 +138,21 @@ function deleteVehicle(id) {
 document.getElementById('modal').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
 });
+
+// ── Tab Navigation ──────────────────────────────────
+function switchTab(tab) {
+  const pages = {
+    dashboard: document.getElementById('dashboardPage'),
+    inventory: document.querySelector('main'),
+    mysales: document.getElementById('mysalesPage'),
+    transactions: document.getElementById('transactionsPage'),
+  };
+  const tabs = document.querySelectorAll('.tab-btn');
+  const order = ['dashboard', 'inventory', 'mysales', 'transactions'];
+
+  Object.values(pages).forEach(p => p.style.display = 'none');
+  tabs.forEach(t => t.classList.remove('active'));
+
+  pages[tab].style.display = 'block';
+  tabs[order.indexOf(tab)].classList.add('active');
+}
