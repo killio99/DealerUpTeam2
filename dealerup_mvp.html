@@ -61,7 +61,7 @@
   <main>
     <!-- Summary -->
     <!-- TODO: wire these to renderStats() so they reflect live inventory data -->
-    <div class="summary not-implemented">
+    <div class="summary">
       <div class="sum-card">
         <div class="sum-label">Total vehicles</div>
         <div class="sum-val" id="statTotal">—</div>
@@ -88,11 +88,18 @@
     </div>
 
     <!-- Toolbar (disabled until implemented) -->
-    <div class="toolbar not-implemented">
+    <div class="toolbar">
       <div class="search-wrap">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input type="text" id="searchInput" placeholder="Search by make, model, or VIN…" />
       </div>
+      <select class="filter-select" id="statusFilter">
+        <option value="">All statuses</option>
+        <option value="Available">Available</option>
+        <option value="Pending">Pending</option>
+        <option value="Sold">Sold</option>
+      </select>
+      <button class="btn-sm" onclick="clearFilters()">Clear filters</button>
     </div>
 
     <!-- Table -->

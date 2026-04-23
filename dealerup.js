@@ -21,7 +21,8 @@ function doLogin() {
         if (currentUser.role === 'admin') {
             document.getElementById('actionsHeader').textContent = 'Actions';
         }
-        // TODO: call renderTable() and renderStats() here once implemented
+        renderTable();
+        renderStats();
     } else {
         document.getElementById('loginError').style.display = 'block';
     }
@@ -57,9 +58,9 @@ let editingId = null;
 // using the `inventory` array above. Hint: use inventory.length,
 // and Array.filter() to count by status.
 function renderStats() {
-    // document.getElementById('statTotal').textContent = ...
-    // document.getElementById('statAvailable').textContent = ...
-    // document.getElementById('statSold').textContent = ...
+    document.getElementById('statTotal').textContent = inventory.length;
+    document.getElementById('statAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
+    document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
 }
 
 // TODO: implement this function to render rows into #inventoryBody.
@@ -67,10 +68,33 @@ function renderStats() {
 // and status filter, and build a <tr> for each vehicle.
 // For admin users, include Edit and Remove action buttons per row.
 function renderTable() {
-    // const q = document.getElementById('searchInput').value.toLowerCase();
-    // const statusF = document.getElementById('statusFilter').value;
-    // const isAdmin = currentUser && currentUser.role === 'admin';
-    // ...
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const statusF = document.getElementById('statusFilter').value;
+    const isAdmin = currentUser && currentUser.role === 'admin';
+
+    const filtered = inventory.filter(v => {
+        const matchSearch = !q || v.make.toLowerCase().includes(q) || v.model.toLowerCase().includes(q) || v.vin.toLowerCase().includes(q);
+        const matchStatus = !statusF || v.status === statusF;
+        return matchSearch && matchStatus;
+    });
+
+    const tbody = document.getElementById('inventoryBody');
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No vehicles found</div><div class="empty-sub">Try adjusting your search or filters.</div></div></td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(v => `
+        <tr>
+            <td>${v.year} ${v.make} ${v.model}</td>
+            <td class="vin">${v.vin}</td>
+            <td>${v.mileage.toLocaleString()} mi</td>
+            <td>$${v.price.toLocaleString()}</td>
+            <td><span class="status s-${v.status.toLowerCase()}">${v.status}</span></td>
+            <td>${isAdmin ? `<div class="action-btns"><button class="btn-sm" onclick="openEditModal(${v.id})">Edit</button><button class="btn-sm danger" onclick="deleteVehicle(${v.id})">Remove</button></div>` : ''}</td>
+        </tr>
+    `).join('');
 }
 
 // ── Modal ─────────────────────────────────────────────
@@ -155,4 +179,11 @@ function switchTab(tab) {
 
   pages[tab].style.display = 'block';
   tabs[order.indexOf(tab)].classList.add('active');
+}
+
+// ── Filters ──────────────────────────────────────────
+function clearFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('statusFilter').value = '';
+    renderTable();
 }
