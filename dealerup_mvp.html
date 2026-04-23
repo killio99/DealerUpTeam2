@@ -4,7 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>DealerUp — MVP</title>
-<script src="dealerup.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -268,5 +267,10 @@
     </div>
   </div>
 </div>
+<!-- Scripts must load in this order: Supabase CDN → config → db model → app -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="Model/database.js"></script>
+<script src="dealerup.js"></script>
 </body>
 </html>
