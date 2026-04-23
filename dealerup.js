@@ -1,28 +1,31 @@
 // ── Auth ──────────────────────────────────────────────
-const USERS = {
-    admin: { password: 'admin123', role: 'admin', displayName: 'Admin' },
-    employee: { password: 'emp123', role: 'employee', displayName: 'Employee' }
-};
-
 let currentUser = null;
+
+// Maps DB role values to CSS class names used in styles.css
+const ROLE_CSS = { 'Admin': 'admin', 'Sales Rep': 'employee' };
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
     const p = document.getElementById('loginPass').value;
-    const user = USERS[u];
-    if (user && user.password === p) {
-        currentUser = { username: u, ...user };
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('app').classList.add('visible');
-        const badge = document.getElementById('headerRoleBadge');
-        badge.textContent = currentUser.role;
-        badge.className = 'role-badge role-' + currentUser.role;
-        document.getElementById('headerUserName').textContent = currentUser.displayName;
-        if (currentUser.role === 'admin') {
-            document.getElementById('actionsHeader').textContent = 'Actions';
+    try {
+        const user = await db.users.login(u, p);
+        if (user) {
+            currentUser = user; // { user_id, username, role }
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('app').classList.add('visible');
+            const badge = document.getElementById('headerRoleBadge');
+            badge.textContent = currentUser.role;
+            badge.className = 'role-badge role-' + (ROLE_CSS[currentUser.role] ?? 'employee');
+            document.getElementById('headerUserName').textContent = currentUser.username;
+            if (currentUser.role === 'Admin') {
+                document.getElementById('actionsHeader').textContent = 'Actions';
+            }
+            await loadInventory();
+        } else {
+            document.getElementById('loginError').style.display = 'block';
         }
-        await loadInventory();
-    } else {
+    } catch (err) {
+        console.error('Login error:', err.message);
         document.getElementById('loginError').style.display = 'block';
     }
 }

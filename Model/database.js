@@ -121,7 +121,14 @@ window.db = {
 
     // ── USERS ─────────────────────────────────────────────
     users: {
-        // Never select the password column
+        // Returns { user_id, username, role } on success, null on bad credentials.
+        // Password comparison is done server-side via pgcrypto — the hash never leaves the DB.
+        async login(username, password) {
+            const { data, error } = await _db
+                .rpc('verify_login', { p_username: username, p_password: password });
+            if (error) throw error;
+            return data[0] ?? null;
+        },
         async getAll() {
             const { data, error } = await _db
                 .from('users')
