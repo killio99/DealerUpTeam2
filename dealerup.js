@@ -19,6 +19,7 @@ async function doLogin() {
             document.getElementById('headerUserName').textContent = currentUser.username;
             if (currentUser.role === 'Admin') {
                 document.getElementById('actionsHeader').textContent = 'Actions';
+                document.getElementById('addVehicleBtn').style.display = 'flex';
             }
             await loadInventory();
         } else {
@@ -43,6 +44,7 @@ function doLogout() {
 document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
 });
+
 // ── Inventory data ────────────────────────────────────
 // Populated from Supabase on login via loadInventory()
 let inventory = [];
@@ -58,27 +60,19 @@ async function loadInventory() {
     }
 }
 
-// ── Render ────────────────────────────────────────────
-// TODO: implement this function to update the three summary stat cards
-// using the `inventory` array above. Hint: use inventory.length,
-// and Array.filter() to count by status.
 function renderStats() {
     document.getElementById('statTotal').textContent = inventory.length;
     document.getElementById('statAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
     document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
 }
 
-// TODO: implement this function to render rows into #inventoryBody.
-// It should read from the `inventory` array, apply the search input
-// and status filter, and build a <tr> for each vehicle.
-// For admin users, include Edit and Remove action buttons per row.
 function renderTable() {
     const q = document.getElementById('searchInput').value.toLowerCase();
     const statusF = document.getElementById('statusFilter').value;
     const isAdmin = currentUser && currentUser.role === 'Admin';
 
     const filtered = inventory.filter(v => {
-        const matchSearch = !q || v.make.toLowerCase().includes(q) || v.model.toLowerCase().includes(q) || v.vin.toLowerCase().includes(q);
+        const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) || (v.model ?? '').toLowerCase().includes(q) || (v.vin ?? '').toLowerCase().includes(q);
         const matchStatus = !statusF || v.status === statusF;
         return matchSearch && matchStatus;
     });
@@ -176,12 +170,13 @@ document.getElementById('modal').addEventListener('click', function (e) {
 async function switchTab(tab) {
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
-    inventory: document.querySelector('main'),
+    inventory: document.getElementById('inventoryPage'),
     mysales: document.getElementById('mysalesPage'),
     transactions: document.getElementById('transactionsPage'),
+    tradein: document.getElementById('tradeinPage'),
   };
   const tabs = document.querySelectorAll('.tab-btn');
-  const order = ['dashboard', 'inventory', 'mysales', 'transactions'];
+  const order = ['dashboard', 'inventory', 'mysales', 'transactions', 'tradein'];
 
   Object.values(pages).forEach(p => p.style.display = 'none');
   tabs.forEach(t => t.classList.remove('active'));
@@ -189,9 +184,11 @@ async function switchTab(tab) {
   pages[tab].style.display = 'block';
   tabs[order.indexOf(tab)].classList.add('active');
 
+  if (tab === 'dashboard') await loadDashboard();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
 }
+
 // ── Filters ──────────────────────────────────────────
 function clearFilters() {
     document.getElementById('searchInput').value = '';
@@ -201,52 +198,275 @@ function clearFilters() {
 
 // ── Transactions ─────────────────────────────────────
 async function loadTransactions() {
+    const tbody = document.getElementById('transactionsBody');
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
+
     try {
-        const sales = await db.sales.getAll();
-        const tbody = document.getElementById('transactionsBody');
-        if (!sales.length) {
-            tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No transactions yet</div></div></td></tr>`;
+        // fetch all three sources in parallel
+        const [sales, acquisitions] = await Promise.all([
+            db.sales.getAll(),
+            db.acquisitions.getAll(),
+        ]);
+
+        // normalize sales into a common shape
+        const saleRows = sales.map(s => ({
+            type: 'Sale',
+            id: s.sale_id,
+            vehicle: s.vehicle_inventory
+                ? `${s.vehicle_inventory.year ?? ''} ${s.vehicle_inventory.make ?? ''} ${s.vehicle_inventory.model ?? ''}`.trim()
+                : '—',
+            vin: s.vin ?? '—',
+            customerOrNotes: s.customer_records ? s.customer_records.customer_name : '—',
+            amount: s.amount_sold,
+            date: s.date_time,
+            status: s.status ?? '—',
+            typeCss: 'type-sale',
+        }));
+
+        // normalize acquisitions — trade-ins and regular acquisitions
+        const acqRows = acquisitions.map(a => {
+            const isTradeIn = a.notes && a.notes.includes('Mode: cash') || (a.notes && a.notes.includes('Mode: discount'));
+            return {
+                type: isTradeIn ? 'Trade-In' : 'Acquisition',
+                id: a.acquisition_id,
+                vehicle: a.vehicle_inventory
+                    ? `${a.vehicle_inventory.year ?? ''} ${a.vehicle_inventory.make ?? ''} ${a.vehicle_inventory.model ?? ''}`.trim()
+                    : '—',
+                vin: a.vin ?? '—',
+                customerOrNotes: a.notes ? a.notes.substring(0, 60) + (a.notes.length > 60 ? '…' : '') : '—',
+                amount: a.purchase_price,
+                date: a.created_at,
+                status: a.status ?? '—',
+                typeCss: isTradeIn ? 'type-tradein' : 'type-acquisition',
+            };
+        });
+
+        // merge and sort by date, newest first
+        const all = [...saleRows, ...acqRows].sort((a, b) => {
+            return new Date(b.date ?? 0) - new Date(a.date ?? 0);
+        });
+
+        // update summary cards
+        const totalRevenue = saleRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
+        const totalSpend = acqRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
+        document.getElementById('transSummary').innerHTML = `
+            <div class="sum-card"><div class="sum-label">Total Records</div><div class="sum-val">${all.length}</div></div>
+            <div class="sum-card"><div class="sum-label">Sales Revenue</div><div class="sum-val">$${totalRevenue.toLocaleString()}</div></div>
+            <div class="sum-card"><div class="sum-label">Acquisitions / Trade-Ins</div><div class="sum-val">${acqRows.length}</div></div>
+            <div class="sum-card"><div class="sum-label">Total Spend</div><div class="sum-val">$${totalSpend.toLocaleString()}</div></div>
+        `;
+
+        if (!all.length) {
+            tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No records yet</div><div class="empty-sub">Sales, acquisitions, and trade-ins will appear here.</div></div></td></tr>`;
             return;
         }
-        tbody.innerHTML = sales.map(s => `
+
+        tbody.innerHTML = all.map(r => `
             <tr>
-                <td>${s.sale_id}</td>
-                <td>${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + s.vehicle_inventory.make + ' ' + s.vehicle_inventory.model : '—'}</td>
-                <td class="vin">${s.vin}</td>
-                <td>${s.customer_records ? s.customer_records.customer_name : '—'}</td>
-                <td>${s.salesman_id ?? '—'}</td>
-                <td>$${s.amount_sold?.toLocaleString() ?? '—'}</td>
-                <td>${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
-                <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
+                <td><span class="status ${r.typeCss}">${r.type}</span></td>
+                <td>${r.id}</td>
+                <td>${r.vehicle}</td>
+                <td class="vin">${r.vin}</td>
+                <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
+                <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
+                <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
+                <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
             </tr>
         `).join('');
+
     } catch (err) {
         console.error('Failed to load transactions:', err.message);
+        tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
     }
 }
 
 // ── My Sales ──────────────────────────────────────────
 async function loadMySales() {
+    const tbody = document.getElementById('mysalesBody');
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
     try {
         const sales = await db.sales.getAll();
         const mine = sales.filter(s => s.salesman_id === currentUser.user_id);
-        const tbody = document.getElementById('mysalesBody');
         if (!mine.length) {
-            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No sales yet</div></div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No sales yet</div><div class="empty-sub">Your sales will appear here once recorded.</div></div></td></tr>`;
+            document.getElementById('mySalesSummary').innerHTML = `
+                <div class="sum-card"><div class="sum-label">My Total Sales</div><div class="sum-val">0</div></div>
+                <div class="sum-card"><div class="sum-label">My Revenue</div><div class="sum-val">$0</div></div>
+                <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">0</div></div>
+                <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">0</div></div>
+            `;
             return;
         }
+        const total = mine.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
+        const finalized = mine.filter(s => s.status === 'Finalized').length;
+        const pending = mine.filter(s => s.status === 'Pending').length;
+        document.getElementById('mySalesSummary').innerHTML = `
+            <div class="sum-card"><div class="sum-label">My Total Sales</div><div class="sum-val">${mine.length}</div></div>
+            <div class="sum-card"><div class="sum-label">My Revenue</div><div class="sum-val">$${total.toLocaleString()}</div></div>
+            <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">${finalized}</div></div>
+            <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
+        `;
         tbody.innerHTML = mine.map(s => `
             <tr>
                 <td>${s.sale_id}</td>
-                <td>${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + s.vehicle_inventory.make + ' ' + s.vehicle_inventory.model : '—'}</td>
-                <td class="vin">${s.vin}</td>
+                <td>${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : '—'}</td>
+                <td class="vin">${s.vin ?? '—'}</td>
                 <td>${s.customer_records ? s.customer_records.customer_name : '—'}</td>
-                <td>$${s.amount_sold?.toLocaleString() ?? '—'}</td>
+                <td>${s.amount_sold != null ? '$' + s.amount_sold.toLocaleString() : '—'}</td>
                 <td>${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
                 <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
             </tr>
         `).join('');
     } catch (err) {
         console.error('Failed to load my sales:', err.message);
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">Failed to load sales</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+    }
+}
+
+// ── Trade-In ──────────────────────────────────────────
+let tradeInMode = 'cash';
+
+function setTradeInMode(mode) {
+    tradeInMode = mode;
+
+    document.getElementById('modeCashBtn').classList.toggle('active', mode === 'cash');
+    document.getElementById('modeDiscountBtn').classList.toggle('active', mode === 'discount');
+
+    document.getElementById('cashFields').style.display = mode === 'cash' ? 'block' : 'none';
+    document.getElementById('discountFields').style.display = mode === 'discount' ? 'block' : 'none';
+
+    const descText = mode === 'cash'
+        ? 'Cash / Credit mode: the trade-in value will be paid out or credited directly to the customer.'
+        : 'Discount mode: the trade-in value will be applied as a discount toward a new vehicle purchase.';
+    document.getElementById('modeDescriptionText').textContent = descText;
+
+    document.getElementById('tiResult').style.display = 'none';
+}
+
+function clearTradeInForm() {
+    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel', 'tiVin', 'tiCashValue', 'tiPurchaseVin', 'tiDiscountValue', 'tiNotes'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('tiCondition').value = 'Good';
+    document.getElementById('tiResult').style.display = 'none';
+}
+
+async function submitTradeIn() {
+    const customerName = document.getElementById('tiCustomerName').value.trim();
+    const year = parseInt(document.getElementById('tiYear').value);
+    const make = document.getElementById('tiMake').value.trim();
+    const model = document.getElementById('tiModel').value.trim();
+    const vin = document.getElementById('tiVin').value.trim().toUpperCase();
+    const condition = document.getElementById('tiCondition').value;
+    const notes = document.getElementById('tiNotes').value.trim();
+
+    if (!customerName || !year || !model || !vin) {
+        showTradeInResult('error', 'Please fill in customer name, year, model, and VIN.');
+        return;
+    }
+
+    let purchasePrice = 0;
+    let fullNotes = `Customer: ${customerName} | Condition: ${condition} | Mode: ${tradeInMode}`;
+
+    if (tradeInMode === 'cash') {
+        purchasePrice = parseFloat(document.getElementById('tiCashValue').value) || 0;
+        fullNotes += ` | Cash Value: $${purchasePrice.toLocaleString()}`;
+    } else {
+        const purchaseVin = document.getElementById('tiPurchaseVin').value.trim().toUpperCase();
+        const discountValue = parseFloat(document.getElementById('tiDiscountValue').value) || 0;
+        purchasePrice = discountValue;
+        fullNotes += ` | Applied as discount on VIN: ${purchaseVin} | Discount: $${discountValue.toLocaleString()}`;
+    }
+
+    if (notes) fullNotes += ` | Notes: ${notes}`;
+
+    try {
+        await db.acquisitions.insert({
+            vin,
+            purchase_price: purchasePrice,
+            status: 'Pending',
+            salesman_id: currentUser.user_id,
+            notes: fullNotes,
+        });
+
+        showTradeInResult('success', `Trade-in submitted successfully for ${year} ${make} ${model} (${vin}).`);
+        clearTradeInForm();
+    } catch (err) {
+        console.error('Trade-in submission failed:', err.message);
+        showTradeInResult('error', 'Submission failed: ' + err.message);
+    }
+}
+
+function showTradeInResult(type, message) {
+    const el = document.getElementById('tiResult');
+    el.style.display = 'block';
+    el.style.padding = '10px 14px';
+    el.style.borderRadius = 'var(--radius)';
+    el.style.fontSize = '13px';
+    if (type === 'success') {
+        el.style.background = 'var(--success-bg)';
+        el.style.color = 'var(--success-text)';
+        el.style.border = '1px solid #b7d98b';
+    } else {
+        el.style.background = 'var(--danger-bg)';
+        el.style.color = 'var(--danger-text)';
+        el.style.border = '1px solid #f7c1c1';
+    }
+    el.textContent = message;
+}
+
+// ── Dashboard ─────────────────────────────────────────
+async function loadDashboard() {
+    try {
+        const [inventory, sales, acquisitions] = await Promise.all([
+            db.inventory.getAll(),
+            db.sales.getAll(),
+            db.acquisitions.getAll(),
+        ]);
+
+        // top stats
+        document.getElementById('dashTotal').textContent = inventory.length;
+        document.getElementById('dashAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
+        document.getElementById('dashSales').textContent = sales.length;
+        const revenue = sales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
+        document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
+
+        // second row
+        document.getElementById('dashPending').textContent = sales.filter(s => s.status === 'Pending').length;
+        const tradeIns = acquisitions.filter(a => a.notes && (a.notes.includes('Mode: cash') || a.notes.includes('Mode: discount')));
+        const regularAcq = acquisitions.filter(a => !a.notes || (!a.notes.includes('Mode: cash') && !a.notes.includes('Mode: discount')));
+        document.getElementById('dashAcquisitions').textContent = regularAcq.length;
+        document.getElementById('dashTradeIns').textContent = tradeIns.length;
+
+        // inventory breakdown
+        document.getElementById('dashBreakAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
+        document.getElementById('dashBreakPending').textContent = inventory.filter(v => v.status === 'Pending').length;
+        document.getElementById('dashBreakOnWay').textContent = inventory.filter(v => v.status === 'On The Way').length;
+        document.getElementById('dashBreakSold').textContent = inventory.filter(v => v.status === 'Sold').length;
+
+        // recent sales table (last 5)
+        const recentSales = sales.slice(0, 5);
+        document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
+            <tr>
+                <td style="font-size:12px;">${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : s.vin}</td>
+                <td>${s.amount_sold != null ? '$' + s.amount_sold.toLocaleString() : '—'}</td>
+                <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
+            </tr>
+        `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
+
+        // recent acquisitions table (last 5)
+        const recentAcq = acquisitions.slice(0, 5);
+        document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
+            const isTradeIn = a.notes && (a.notes.includes('Mode: cash') || a.notes.includes('Mode: discount'));
+            return `
+            <tr>
+                <td class="vin" style="font-size:11px;">${a.vin ?? '—'}</td>
+                <td><span class="status ${isTradeIn ? 'type-tradein' : 'type-acquisition'}">${isTradeIn ? 'Trade-In' : 'Acquisition'}</span></td>
+                <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+            </tr>
+        `}).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+
+    } catch (err) {
+        console.error('Failed to load dashboard:', err.message);
     }
 }

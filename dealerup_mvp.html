@@ -36,6 +36,7 @@
 
 <!-- ── App ── -->
 <div class="app" id="app">
+
   <header>
     <div class="logo">
       <div class="logo-mark">
@@ -49,17 +50,18 @@
       <button class="btn-logout" onclick="doLogout()">Sign out</button>
     </div>
   </header>
-<!-- ── Tab Navigation ── -->
-<nav class="tab-nav">
-  <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
-  <button class="tab-btn active" onclick="switchTab('inventory')">Inventory</button>
-  <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
-  <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
-</nav>
 
-  <main>
-    <!-- Summary -->
-    <!-- TODO: wire these to renderStats() so they reflect live inventory data -->
+  <!-- ── Tab Navigation ── -->
+  <nav class="tab-nav">
+    <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab-btn active" onclick="switchTab('inventory')">Inventory</button>
+    <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
+    <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
+    <button class="tab-btn" onclick="switchTab('tradein')">Trade-In</button>
+  </nav>
+
+  <!-- ── Inventory Page ── -->
+  <main id="inventoryPage">
     <div class="summary">
       <div class="sum-card">
         <div class="sum-label">Total vehicles</div>
@@ -74,19 +76,10 @@
         <div class="sum-val" id="statSold">—</div>
       </div>
     </div>
-
-    <!-- Page header -->
     <div class="page-hdr">
       <div class="page-title">Inventory</div>
+      <button class="btn-add" id="addVehicleBtn" style="display:none;" onclick="openAddModal()">+ Add Vehicle</button>
     </div>
-
-    <!-- TODO banner -->
-    <div class="todo-banner">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span>Sprint task: connect <code>inventory</code> data and implement <code>renderTable()</code> and <code>renderStats()</code> to populate this view.</span>
-    </div>
-
-    <!-- Toolbar (disabled until implemented) -->
     <div class="toolbar">
       <div class="search-wrap">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -100,8 +93,6 @@
       </select>
       <button class="btn-sm" onclick="clearFilters()">Clear filters</button>
     </div>
-
-    <!-- Table -->
     <div class="table-wrap">
       <table>
         <thead>
@@ -119,11 +110,7 @@
             <td colspan="6">
               <div class="empty-state">
                 <div class="empty-icon">&#9723;</div>
-                <div class="empty-title">Inventory not yet connected</div>
-                <div class="empty-sub">
-                  The <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px">inventory</code> array is defined in the script below.<br>
-                  Implement <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px">renderTable()</code> to display it here.
-                </div>
+                <div class="empty-title">Loading inventory...</div>
               </div>
             </td>
           </tr>
@@ -131,142 +118,332 @@
       </table>
     </div>
   </main>
-</div>
 
-<!-- ── Transactions Page ── -->
-<div class="page" id="transactionsPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
-  <div class="page-hdr">
-    <div class="page-title">Transactions</div>
-  </div>
-  <div class="todo-banner">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span>Sprint task: connect transaction data and implement <code>renderTransactions()</code> to populate this view.</span>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Sale ID</th>
-          <th>Vehicle</th>
-          <th>VIN</th>
-          <th>Customer</th>
-          <th>Salesman</th>
-          <th>Amount</th>
-          <th>Date</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="transactionsBody">
-        <tr>
-          <td colspan="8">
-            <div class="empty-state">
-              <div class="empty-icon">&#9723;</div>
-              <div class="empty-title">Transactions not yet connected</div>
-              <div class="empty-sub">Implement <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px">renderTransactions()</code> to display sales data here.</div>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ── Dashboard Page ── -->
-<div class="page" id="dashboardPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
-  <div class="page-hdr">
-    <div class="page-title">Dashboard</div>
-  </div>
-  <div class="todo-banner">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span>Sprint task: implement dashboard stats and activity feed.</span>
-  </div>
-  <div class="empty-state">
-    <div class="empty-icon">&#9723;</div>
-    <div class="empty-title">Dashboard coming soon</div>
-    <div class="empty-sub">Summary cards and recent activity will appear here.</div>
-  </div>
-</div>
-
-<!-- ── My Sales Page ── -->
-<div class="page" id="mysalesPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
-  <div class="page-hdr">
-    <div class="page-title">My Sales</div>
-  </div>
-  <div class="todo-banner">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span>Sprint task: connect sales data filtered by current logged-in user.</span>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Sale ID</th>
-          <th>Vehicle</th>
-          <th>VIN</th>
-          <th>Customer</th>
-          <th>Amount</th>
-          <th>Date</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="mysalesBody">
-        <tr>
-          <td colspan="7">
-            <div class="empty-state">
-              <div class="empty-icon">&#9723;</div>
-              <div class="empty-title">No sales yet</div>
-              <div class="empty-sub">Your completed sales will appear here once connected to the database.</div>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-<!-- ── Add / Edit Modal ── -->
-<div class="modal-backdrop" id="modal">
-  <div class="modal">
-    <div class="modal-title" id="modalTitle">Add vehicle</div>
-    <div class="form-grid">
-      <div>
-        <label>Year</label>
-        <input type="number" id="fYear" placeholder="2024" min="1900" max="2030" />
-      </div>
-      <div>
-        <label>Make</label>
-        <input type="text" id="fMake" placeholder="Ford" />
-      </div>
-      <div class="full">
-        <label>Model</label>
-        <input type="text" id="fModel" placeholder="F-150" />
-      </div>
-      <div class="full">
-        <label>VIN</label>
-        <input type="text" id="fVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
-      </div>
-      <div>
-        <label>Mileage</label>
-        <input type="number" id="fMileage" placeholder="0" min="0" />
-      </div>
-      <div>
-        <label>Price ($)</label>
-        <input type="number" id="fPrice" placeholder="25000" min="0" />
-      </div>
-      <div class="full">
-        <label>Status</label>
-        <select id="fStatus">
-          <option>Available</option>
-          <option>Pending</option>
-          <option>Sold</option>
-        </select>
-      </div>
+  <!-- ── Transactions Page ── -->
+  <div class="page" id="transactionsPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Transactions</div>
     </div>
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-save" onclick="saveVehicle()">Save</button>
+    <div class="summary" id="transSummary" style="margin-bottom:20px;">
+      <div class="sum-card"><div class="sum-label">Total Sales</div><div class="sum-val">—</div></div>
+      <div class="sum-card"><div class="sum-label">Total Revenue</div><div class="sum-val">—</div></div>
+      <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">—</div></div>
+      <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>ID</th>
+            <th>Vehicle</th>
+            <th>VIN</th>
+            <th>Customer / Notes</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="transactionsBody">
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">&#9723;</div>
+                <div class="empty-title">Loading transactions...</div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
-</div>
+
+  <!-- ── Dashboard Page ── -->
+  <div class="page" id="dashboardPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Dashboard</div>
+      <span id="dashboardRoleBadge"></span>
+    </div>
+
+    <!-- Top stats row -->
+    <div class="summary" style="grid-template-columns: repeat(4, 1fr); margin-bottom:28px;">
+      <div class="sum-card">
+        <div class="sum-label">Total Vehicles</div>
+        <div class="sum-val" id="dashTotal">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Available</div>
+        <div class="sum-val" id="dashAvailable">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Total Sales</div>
+        <div class="sum-val" id="dashSales">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Total Revenue</div>
+        <div class="sum-val" id="dashRevenue">—</div>
+      </div>
+    </div>
+
+    <!-- Second row -->
+    <div class="summary" style="grid-template-columns: repeat(3, 1fr); margin-bottom:32px;">
+      <div class="sum-card">
+        <div class="sum-label">Pending Sales</div>
+        <div class="sum-val" id="dashPending">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Acquisitions</div>
+        <div class="sum-val" id="dashAcquisitions">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Trade-Ins</div>
+        <div class="sum-val" id="dashTradeIns">—</div>
+      </div>
+    </div>
+
+    <!-- Two column section -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:28px;">
+
+      <!-- Recent Sales -->
+      <div class="table-wrap" style="padding:0;">
+        <div style="padding:16px 18px; border-bottom:1px solid var(--border); font-weight:500; font-size:13px;">Recent Sales</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Vehicle</th>
+              <th>Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="dashRecentSales">
+            <tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Recent Acquisitions -->
+      <div class="table-wrap" style="padding:0;">
+        <div style="padding:16px 18px; border-bottom:1px solid var(--border); font-weight:500; font-size:13px;">Recent Acquisitions & Trade-Ins</div>
+        <table>
+          <thead>
+            <tr>
+              <th>VIN</th>
+              <th>Type</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="dashRecentAcquisitions">
+            <tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- Inventory breakdown -->
+    <div class="table-wrap" style="padding:0; margin-bottom:28px;">
+      <div style="padding:16px 18px; border-bottom:1px solid var(--border); font-weight:500; font-size:13px;">Inventory Status Breakdown</div>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:0;">
+        <div style="padding:20px 18px; border-right:1px solid var(--border);">
+          <div class="sum-label">Available</div>
+          <div class="sum-val" id="dashBreakAvailable">—</div>
+        </div>
+        <div style="padding:20px 18px; border-right:1px solid var(--border);">
+          <div class="sum-label">Pending</div>
+          <div class="sum-val" id="dashBreakPending">—</div>
+        </div>
+        <div style="padding:20px 18px; border-right:1px solid var(--border);">
+          <div class="sum-label">On The Way</div>
+          <div class="sum-val" id="dashBreakOnWay">—</div>
+        </div>
+        <div style="padding:20px 18px;">
+          <div class="sum-label">Sold</div>
+          <div class="sum-val" id="dashBreakSold">—</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── My Sales Page ── -->
+  <div class="page" id="mysalesPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">My Sales</div>
+    </div>
+    <div class="summary" id="mySalesSummary" style="margin-bottom:20px;">
+      <div class="sum-card"><div class="sum-label">My Total Sales</div><div class="sum-val">—</div></div>
+      <div class="sum-card"><div class="sum-label">My Revenue</div><div class="sum-val">—</div></div>
+      <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">—</div></div>
+      <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Sale ID</th>
+            <th>Vehicle</th>
+            <th>VIN</th>
+            <th>Customer</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="mysalesBody">
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <div class="empty-icon">&#9723;</div>
+                <div class="empty-title">Loading sales...</div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Trade-In Page ── -->
+  <div class="page" id="tradeinPage" style="display:none; padding: 28px 24px; max-width:680px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Trade-In Form</div>
+    </div>
+
+    <!-- Mode Toggle -->
+    <div style="display:flex; gap:8px; margin-bottom:24px;">
+      <button class="tradein-mode-btn active" id="modeCashBtn" onclick="setTradeInMode('cash')">
+        💵 Cash / Credit
+      </button>
+      <button class="tradein-mode-btn" id="modeDiscountBtn" onclick="setTradeInMode('discount')">
+        🏷️ Discount on Purchase
+      </button>
+    </div>
+
+    <!-- Mode description -->
+    <div class="todo-banner" id="modeDescription" style="margin-bottom:24px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="modeDescriptionText">Cash / Credit mode: the trade-in value will be paid out or credited directly to the customer.</span>
+    </div>
+
+    <!-- Form -->
+    <div class="table-wrap" style="padding:24px;">
+
+      <div style="margin-bottom:18px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Customer Info</div>
+        <label>Customer Name</label>
+        <input type="text" id="tiCustomerName" placeholder="Jane Smith" />
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Vehicle Being Traded In</div>
+        <div class="form-grid">
+          <div>
+            <label>Year</label>
+            <input type="number" id="tiYear" placeholder="2019" min="1900" max="2030" />
+          </div>
+          <div>
+            <label>Make</label>
+            <input type="text" id="tiMake" placeholder="Toyota" />
+          </div>
+          <div class="full">
+            <label>Model</label>
+            <input type="text" id="tiModel" placeholder="Camry" />
+          </div>
+          <div class="full">
+            <label>VIN</label>
+            <input type="text" id="tiVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
+          </div>
+          <div class="full">
+            <label>Condition</label>
+            <select id="tiCondition">
+              <option value="Excellent">Excellent</option>
+              <option value="Good" selected>Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Poor">Poor</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cash mode fields -->
+      <div id="cashFields" style="margin-bottom:18px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Cash / Credit Details</div>
+        <label>Trade-In Value Offered ($)</label>
+        <input type="number" id="tiCashValue" placeholder="8000" min="0" />
+      </div>
+
+      <!-- Discount mode fields -->
+      <div id="discountFields" style="display:none; margin-bottom:18px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Discount Details</div>
+        <label>VIN of Vehicle Being Purchased</label>
+        <input type="text" id="tiPurchaseVin" placeholder="VIN of new vehicle" maxlength="17" style="font-family:var(--mono)" />
+        <label>Discount Amount Applied ($)</label>
+        <input type="number" id="tiDiscountValue" placeholder="5000" min="0" />
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <label>Notes</label>
+        <input type="text" id="tiNotes" placeholder="Any additional details..." />
+      </div>
+
+      <!-- Result message -->
+      <div id="tiResult" style="display:none; margin-bottom:16px;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn-cancel" onclick="clearTradeInForm()">Clear</button>
+        <button class="btn-save" onclick="submitTradeIn()">Submit Trade-In</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Add / Edit Modal ── -->
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <div class="modal-title" id="modalTitle">Add vehicle</div>
+      <div class="form-grid">
+        <div>
+          <label>Year</label>
+          <input type="number" id="fYear" placeholder="2024" min="1900" max="2030" />
+        </div>
+        <div>
+          <label>Make</label>
+          <input type="text" id="fMake" placeholder="Ford" />
+        </div>
+        <div class="full">
+          <label>Model</label>
+          <input type="text" id="fModel" placeholder="F-150" />
+        </div>
+        <div class="full">
+          <label>VIN</label>
+          <input type="text" id="fVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
+        </div>
+        <div>
+          <label>Mileage</label>
+          <input type="number" id="fMileage" placeholder="0" min="0" />
+        </div>
+        <div>
+          <label>Price ($)</label>
+          <input type="number" id="fPrice" placeholder="25000" min="0" />
+        </div>
+        <div class="full">
+          <label>Status</label>
+          <select id="fStatus">
+            <option>Available</option>
+            <option>Pending</option>
+            <option>Sold</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-save" onclick="saveVehicle()">Save</button>
+      </div>
+    </div>
+  </div>
+
+</div> <!-- closes .app -->
+
 <!-- Scripts must load in this order: Supabase CDN → config → db model → app -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>

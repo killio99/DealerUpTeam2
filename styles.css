@@ -597,3 +597,44 @@ tbody tr:hover td {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+
+/* ── Trade-In Mode Toggle ── */
+.tradein-mode-btn {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-family: var(--font);
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.tradein-mode-btn:hover {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.tradein-mode-btn.active {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ── Transaction Type Badges ── */
+.type-sale {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.type-tradein {
+    background: var(--warn-bg);
+    color: var(--warn-text);
+}
+
+.type-acquisition {
+    background: var(--success-bg);
+    color: var(--success-text);
+}
