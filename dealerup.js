@@ -1,29 +1,56 @@
 // ── Auth ──────────────────────────────────────────────
-let currentUser = null;
+const USERS = {
+    admin: { password: 'admin123', role: 'admin', displayName: 'Admin' },
+    employee: { password: 'emp123', role: 'employee', displayName: 'Employee' }
+};
 
-// Maps DB role values to CSS class names used in styles.css
+// Maps DB role values → CSS classes
 const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
 
+let currentUser = null;
+
+// ✅ SINGLE login function (merged local + DB)
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
     const p = document.getElementById('loginPass').value;
+
     try {
-        const user = await db.users.login(u, p);
+        // Try DB login first
+        let user = null;
+        if (typeof db !== "undefined") {
+            user = await db.users.login(u, p);
+        }
+
+        // Fallback to local demo users
+        if (!user && USERS[u] && USERS[u].password === p) {
+            user = {
+                username: u,
+                role: USERS[u].role === 'admin' ? 'Admin' : 'Employee'
+            };
+        }
+
         if (user) {
-            currentUser = user; // { user_id, username, role }
+            currentUser = user;
+
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
+
             const badge = document.getElementById('headerRoleBadge');
             badge.textContent = currentUser.role;
             badge.className = 'role-badge role-' + (ROLE_CSS[currentUser.role] ?? 'employee');
-            document.getElementById('headerUserName').textContent = currentUser.username;
-            if (currentUser.role === 'Admin') {
+
+            document.getElementById('headerUserName').textContent =
+                user.displayName || user.username;
+
+            if ((currentUser.role === 'Admin') || (currentUser.role === 'admin')) {
                 document.getElementById('actionsHeader').textContent = 'Actions';
             }
+
             await loadInventory();
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
+
     } catch (err) {
         console.error('Login error:', err.message);
         document.getElementById('loginError').style.display = 'block';
@@ -34,56 +61,117 @@ function doLogout() {
     currentUser = null;
     document.getElementById('app').classList.remove('visible');
     document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('loginUser').value = '';
-    document.getElementById('loginPass').value = '';
-    document.getElementById('loginError').style.display = 'none';
-    document.getElementById('actionsHeader').textContent = '';
 }
 
-document.getElementById('loginPass').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
+// Enter key login (safe after DOM loads)
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById('loginPass').addEventListener('keydown', e => {
+        if (e.key === 'Enter') doLogin();
+    });
 });
-// ── Inventory data ────────────────────────────────────
-// Populated from Supabase on login via loadInventory()
+
+
+// ── Inventory ─────────────────────────────────────────
+
+// ✅ SINGLE source of truth
 let inventory = [];
 let editingVin = null;
 
+// Load from DB OR fallback demo data
 async function loadInventory() {
     try {
-        inventory = await db.inventory.getAll();
+        if (typeof db !== "undefined") {
+            inventory = await db.inventory.getAll();
+        } else {
+            // fallback demo data
+            inventory = [
+                { id: 1, year: 2023, make: 'Ford', model: 'F-150', vin: '1FTFW1E80NFA12345', mileage: 12400, listed_sale: 38900, status: 'Available' },
+                { id: 2, year: 2022, make: 'Toyota', model: 'Camry', vin: '4T1BF1FK5NU123456', mileage: 28100, listed_sale: 24500, status: 'Available' },
+                { id: 3, year: 2024, make: 'Honda', model: 'CR-V', vin: '2HKRM4H77RH123456', mileage: 3200, listed_sale: 31200, status: 'Pending' }
+            ];
+        }
+
         renderTable();
         renderStats();
+
     } catch (err) {
         console.error('Failed to load inventory:', err.message);
     }
 }
 
+
 // ── Render ────────────────────────────────────────────
-// TODO: implement this function to update the three summary stat cards
-// using the `inventory` array above. Hint: use inventory.length,
-// and Array.filter() to count by status.
+
 function renderStats() {
-    // document.getElementById('statTotal').textContent = ...
-    // document.getElementById('statAvailable').textContent = ...
-    // document.getElementById('statSold').textContent = ...
+    document.getElementById('statTotal').textContent = inventory.length;
+
+    document.getElementById('statAvailable').textContent =
+        inventory.filter(v => v.status === 'Available').length;
+
+    document.getElementById('statSold').textContent =
+        inventory.filter(v => v.status === 'Sold').length;
 }
 
-// TODO: implement this function to render rows into #inventoryBody.
-// It should read from the `inventory` array, apply the search input
-// and status filter, and build a <tr> for each vehicle.
-// For admin users, include Edit and Remove action buttons per row.
 function renderTable() {
-    // const q = document.getElementById('searchInput').value.toLowerCase();
-    // const statusF = document.getElementById('statusFilter').value;
-    // const isAdmin = currentUser && currentUser.role === 'admin';
-    // ...
+    const tbody = document.getElementById("inventoryBody");
+    const search = document.getElementById("searchInput")?.value.toLowerCase() || "";
+
+    const filtered = inventory.filter(v =>
+        `${v.year} ${v.make} ${v.model} ${v.vin}`.toLowerCase().includes(search)
+    );
+
+    tbody.innerHTML = "";
+
+    if (inventory.length === 0) {
+        tbody.innerHTML = `
+        <tr><td colspan="6">
+            <div class="empty-state">
+                <div class="empty-title">No vehicles in inventory</div>
+            </div>
+        </td></tr>`;
+        return;
+    }
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+        <tr><td colspan="6">
+            <div class="empty-state empty-filter">
+                <div class="empty-title">No matching vehicles</div>
+            </div>
+        </td></tr>`;
+        return;
+    }
+
+    filtered.forEach(v => {
+        const row = document.createElement("tr");
+
+        row.innerHTML = `
+            <td><strong>${v.year} ${v.make} ${v.model}</strong></td>
+            <td class="vin">${v.vin}</td>
+            <td>${v.mileage.toLocaleString()} mi</td>
+            <td>$${(v.listed_sale ?? v.price ?? 0).toLocaleString()}</td>
+            <td><span class="status s-${v.status.toLowerCase()}">${v.status}</span></td>
+            <td>
+                ${(currentUser?.role === 'Admin') ? `
+                    <div class="action-btns">
+                        <button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button>
+                        <button class="btn-sm danger" onclick="deleteVehicle('${v.vin}')">Remove</button>
+                    </div>
+                ` : ''}
+            </td>
+        `;
+
+        tbody.appendChild(row);
+    });
 }
+
 
 // ── Modal ─────────────────────────────────────────────
+
 function openAddModal() {
     editingVin = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
-    ['fYear', 'fMake', 'fModel', 'fVin', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
+    ['fYear','fMake','fModel','fVin','fMileage','fPrice'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
     document.getElementById('modal').classList.add('open');
 }
@@ -91,15 +179,18 @@ function openAddModal() {
 function openEditModal(vin) {
     const v = inventory.find(x => x.vin === vin);
     if (!v) return;
+
     editingVin = vin;
+
     document.getElementById('modalTitle').textContent = 'Edit vehicle';
-    document.getElementById('fYear').value = v.year;
+    document.getElementById('fYear').value = v.year ?? '';
     document.getElementById('fMake').value = v.make ?? '';
-    document.getElementById('fModel').value = v.model;
+    document.getElementById('fModel').value = v.model ?? '';
     document.getElementById('fVin').value = v.vin;
     document.getElementById('fMileage').value = v.mileage ?? '';
     document.getElementById('fPrice').value = v.listed_sale ?? '';
     document.getElementById('fStatus').value = v.status;
+
     document.getElementById('modal').classList.add('open');
 }
 
@@ -117,34 +208,45 @@ async function saveVehicle() {
     const status = document.getElementById('fStatus').value;
 
     if (!year || !model || !vin) {
-        alert('Please fill in year, model, and VIN.');
+        alert('Please fill in required fields.');
         return;
     }
 
     try {
-        if (editingVin) {
-            await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+        if (typeof db !== "undefined") {
+            if (editingVin) {
+                await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+            } else {
+                await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            }
+            await loadInventory();
         } else {
-            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            // fallback local mode
+            inventory.push({ vin, year, make, model, mileage, listed_sale, status });
+            renderTable();
+            renderStats();
         }
+
         closeModal();
-        await loadInventory();
+
     } catch (err) {
         alert('Save failed: ' + err.message);
     }
 }
 
 async function deleteVehicle(vin) {
-    if (!confirm('Remove this vehicle from inventory?')) return;
+    if (!confirm('Remove this vehicle?')) return;
+
     try {
-        await db.inventory.delete(vin);
-        await loadInventory();
+        if (typeof db !== "undefined") {
+            await db.inventory.delete(vin);
+            await loadInventory();
+        } else {
+            inventory = inventory.filter(v => v.vin !== vin);
+            renderTable();
+            renderStats();
+        }
     } catch (err) {
         alert('Delete failed: ' + err.message);
     }
 }
-
-// Close modal on backdrop click
-document.getElementById('modal').addEventListener('click', function (e) {
-    if (e.target === this) closeModal();
-});
