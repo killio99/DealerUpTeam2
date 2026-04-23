@@ -2,7 +2,7 @@
 let currentUser = null;
 
 // Maps DB role values to CSS class names used in styles.css
-const ROLE_CSS = { 'Admin': 'admin', 'Sales Rep': 'employee' };
+const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();

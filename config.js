@@ -1,6 +1,4 @@
 // ── Supabase Configuration ────────────────────────────
-// Get your keys from: https://app.supabase.com/project/_/settings/api
-// DO NOT commit this file to GitHub (it's in .gitignore)
 
 const SUPABASE_CONFIG = {
     SUPABASE_URL: 'https://lihoizmnlwhtkcrytukt.supabase.co',
