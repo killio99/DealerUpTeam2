@@ -24,9 +24,6 @@ async function doLogin() {
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
-        renderTable();
-        renderStats();
-    } else {
     } catch (err) {
         console.error('Login error:', err.message);
         document.getElementById('loginError').style.display = 'block';
@@ -78,7 +75,7 @@ function renderStats() {
 function renderTable() {
     const q = document.getElementById('searchInput').value.toLowerCase();
     const statusF = document.getElementById('statusFilter').value;
-    const isAdmin = currentUser && currentUser.role === 'admin';
+    const isAdmin = currentUser && currentUser.role === 'Admin';
 
     const filtered = inventory.filter(v => {
         const matchSearch = !q || v.make.toLowerCase().includes(q) || v.model.toLowerCase().includes(q) || v.vin.toLowerCase().includes(q);
@@ -95,12 +92,12 @@ function renderTable() {
 
     tbody.innerHTML = filtered.map(v => `
         <tr>
-            <td>${v.year} ${v.make} ${v.model}</td>
+            <td>${v.year ?? '—'} ${v.make ?? '—'} ${v.model ?? '—'}</td>
             <td class="vin">${v.vin}</td>
-            <td>${v.mileage.toLocaleString()} mi</td>
-            <td>$${v.price.toLocaleString()}</td>
-            <td><span class="status s-${v.status.toLowerCase()}">${v.status}</span></td>
-            <td>${isAdmin ? `<div class="action-btns"><button class="btn-sm" onclick="openEditModal(${v.id})">Edit</button><button class="btn-sm danger" onclick="deleteVehicle(${v.id})">Remove</button></div>` : ''}</td>
+            <td>${v.mileage != null ? v.mileage.toLocaleString() + ' mi' : '—'}</td>
+            <td>${v.listed_sale != null ? '$' + v.listed_sale.toLocaleString() : '—'}</td>
+            <td><span class="status s-${v.status?.toLowerCase()}">${v.status ?? '—'}</span></td>
+            <td>${isAdmin ? `<div class="action-btns"><button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button><button class="btn-sm danger" onclick="deleteVehicle('${v.vin}')">Remove</button></div>` : ''}</td>
         </tr>
     `).join('');
 }
@@ -176,7 +173,7 @@ document.getElementById('modal').addEventListener('click', function (e) {
 });
 
 // ── Tab Navigation ──────────────────────────────────
-function switchTab(tab) {
+async function switchTab(tab) {
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
     inventory: document.querySelector('main'),
@@ -191,11 +188,65 @@ function switchTab(tab) {
 
   pages[tab].style.display = 'block';
   tabs[order.indexOf(tab)].classList.add('active');
-}
 
+  if (tab === 'transactions') await loadTransactions();
+  if (tab === 'mysales') await loadMySales();
+}
 // ── Filters ──────────────────────────────────────────
 function clearFilters() {
     document.getElementById('searchInput').value = '';
     document.getElementById('statusFilter').value = '';
     renderTable();
+}
+
+// ── Transactions ─────────────────────────────────────
+async function loadTransactions() {
+    try {
+        const sales = await db.sales.getAll();
+        const tbody = document.getElementById('transactionsBody');
+        if (!sales.length) {
+            tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No transactions yet</div></div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = sales.map(s => `
+            <tr>
+                <td>${s.sale_id}</td>
+                <td>${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + s.vehicle_inventory.make + ' ' + s.vehicle_inventory.model : '—'}</td>
+                <td class="vin">${s.vin}</td>
+                <td>${s.customer_records ? s.customer_records.customer_name : '—'}</td>
+                <td>${s.salesman_id ?? '—'}</td>
+                <td>$${s.amount_sold?.toLocaleString() ?? '—'}</td>
+                <td>${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
+                <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        console.error('Failed to load transactions:', err.message);
+    }
+}
+
+// ── My Sales ──────────────────────────────────────────
+async function loadMySales() {
+    try {
+        const sales = await db.sales.getAll();
+        const mine = sales.filter(s => s.salesman_id === currentUser.user_id);
+        const tbody = document.getElementById('mysalesBody');
+        if (!mine.length) {
+            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No sales yet</div></div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = mine.map(s => `
+            <tr>
+                <td>${s.sale_id}</td>
+                <td>${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + s.vehicle_inventory.make + ' ' + s.vehicle_inventory.model : '—'}</td>
+                <td class="vin">${s.vin}</td>
+                <td>${s.customer_records ? s.customer_records.customer_name : '—'}</td>
+                <td>$${s.amount_sold?.toLocaleString() ?? '—'}</td>
+                <td>${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
+                <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        console.error('Failed to load my sales:', err.message);
+    }
 }
