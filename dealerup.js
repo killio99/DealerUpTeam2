@@ -6,7 +6,7 @@ const USERS = {
 
 let currentUser = null;
 
-function doLogin() {
+async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
     const p = document.getElementById('loginPass').value;
     const user = USERS[u];
@@ -21,7 +21,7 @@ function doLogin() {
         if (currentUser.role === 'admin') {
             document.getElementById('actionsHeader').textContent = 'Actions';
         }
-        // TODO: call renderTable() and renderStats() here once implemented
+        await loadInventory();
     } else {
         document.getElementById('loginError').style.display = 'block';
     }
@@ -40,17 +40,20 @@ function doLogout() {
 document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
 });
- //here
 // ── Inventory data ────────────────────────────────────
-let inventory = [
-    { id: 1, year: 2023, make: 'Ford', model: 'F-150', vin: '1FTFW1E80NFA12345', mileage: 12400, price: 38900, status: 'Available' },
-    { id: 2, year: 2022, make: 'Toyota', model: 'Camry', vin: '4T1BF1FK5NU123456', mileage: 28100, price: 24500, status: 'Available' },
-    { id: 3, year: 2024, make: 'Honda', model: 'CR-V', vin: '2HKRM4H77RH123456', mileage: 3200, price: 31200, status: 'Pending' },
-    { id: 4, year: 2021, make: 'Chevrolet', model: 'Silverado', vin: '3GCUYDEDXMG123456', mileage: 44700, price: 29800, status: 'Available' },
-    { id: 5, year: 2023, make: 'Hyundai', model: 'Tucson', vin: '5NMJBCDE3PH123456', mileage: 9800, price: 26700, status: 'Sold' },
-];
-let nextId = 6;
-let editingId = null;
+// Populated from Supabase on login via loadInventory()
+let inventory = [];
+let editingVin = null;
+
+async function loadInventory() {
+    try {
+        inventory = await db.inventory.getAll();
+        renderTable();
+        renderStats();
+    } catch (err) {
+        console.error('Failed to load inventory:', err.message);
+    }
+}
 
 // ── Render ────────────────────────────────────────────
 // TODO: implement this function to update the three summary stat cards
@@ -75,24 +78,24 @@ function renderTable() {
 
 // ── Modal ─────────────────────────────────────────────
 function openAddModal() {
-    editingId = null;
+    editingVin = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
     ['fYear', 'fMake', 'fModel', 'fVin', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
     document.getElementById('modal').classList.add('open');
 }
 
-function openEditModal(id) {
-    const v = inventory.find(x => x.id === id);
+function openEditModal(vin) {
+    const v = inventory.find(x => x.vin === vin);
     if (!v) return;
-    editingId = id;
+    editingVin = vin;
     document.getElementById('modalTitle').textContent = 'Edit vehicle';
     document.getElementById('fYear').value = v.year;
-    document.getElementById('fMake').value = v.make;
+    document.getElementById('fMake').value = v.make ?? '';
     document.getElementById('fModel').value = v.model;
     document.getElementById('fVin').value = v.vin;
-    document.getElementById('fMileage').value = v.mileage;
-    document.getElementById('fPrice').value = v.price;
+    document.getElementById('fMileage').value = v.mileage ?? '';
+    document.getElementById('fPrice').value = v.listed_sale ?? '';
     document.getElementById('fStatus').value = v.status;
     document.getElementById('modal').classList.add('open');
 }
@@ -101,37 +104,41 @@ function closeModal() {
     document.getElementById('modal').classList.remove('open');
 }
 
-function saveVehicle() {
+async function saveVehicle() {
     const year = parseInt(document.getElementById('fYear').value);
     const make = document.getElementById('fMake').value.trim();
     const model = document.getElementById('fModel').value.trim();
     const vin = document.getElementById('fVin').value.trim().toUpperCase();
     const mileage = parseInt(document.getElementById('fMileage').value) || 0;
-    const price = parseInt(document.getElementById('fPrice').value) || 0;
+    const listed_sale = parseFloat(document.getElementById('fPrice').value) || 0;
     const status = document.getElementById('fStatus').value;
 
-    if (!year || !make || !model || !vin) {
-        alert('Please fill in year, make, model, and VIN.');
+    if (!year || !model || !vin) {
+        alert('Please fill in year, model, and VIN.');
         return;
     }
 
-    if (editingId) {
-        const v = inventory.find(x => x.id === editingId);
-        if (v) Object.assign(v, { year, make, model, vin, mileage, price, status });
-    } else {
-        inventory.push({ id: nextId++, year, make, model, vin, mileage, price, status });
+    try {
+        if (editingVin) {
+            await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+        } else {
+            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+        }
+        closeModal();
+        await loadInventory();
+    } catch (err) {
+        alert('Save failed: ' + err.message);
     }
-
-    closeModal();
-    renderTable();
-    renderStats();
 }
 
-function deleteVehicle(id) {
+async function deleteVehicle(vin) {
     if (!confirm('Remove this vehicle from inventory?')) return;
-    inventory = inventory.filter(v => v.id !== id);
-    renderTable();
-    renderStats();
+    try {
+        await db.inventory.delete(vin);
+        await loadInventory();
+    } catch (err) {
+        alert('Delete failed: ' + err.message);
+    }
 }
 
 // Close modal on backdrop click
