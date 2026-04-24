@@ -55,6 +55,7 @@
   <nav class="tab-nav">
     <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
     <button class="tab-btn active" onclick="switchTab('inventory')">Inventory</button>
+    <button class="tab-btn" onclick="switchTab('acquisitions')">Acquisitions</button>
     <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
     <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
     <button class="tab-btn" onclick="switchTab('tradein')">Trade-In</button>
@@ -265,6 +266,108 @@
 
   </div>
 
+  <!-- ── Acquisitions Page ── -->
+  <div class="page" id="acquisitionsPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Acquisitions</div>
+      <span id="acqRoleLabel" class="role-badge"></span>
+    </div>
+
+    <div id="acqAdminView" style="display:none;">
+      <div class="summary" id="acqAdminSummary" style="margin-bottom:20px;">
+        <div class="sum-card"><div class="sum-label">Pending Approval</div><div class="sum-val">—</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">—</div></div>
+        <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>VIN</th>
+              <th>Price</th>
+              <th>Sales Rep</th>
+              <th>Notes</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="acqAdminBody">
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <div class="empty-icon">&#9723;</div>
+                  <div class="empty-title">Loading acquisition requests...</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="acqEmployeeView" style="display:none;">
+      <div class="table-wrap" style="padding:24px; margin-bottom:20px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Create Acquisition Request</div>
+        <div class="form-grid">
+          <div class="full">
+            <label>VIN</label>
+            <input type="text" id="acqVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
+          </div>
+          <div>
+            <label>Purchase Price ($)</label>
+            <input type="number" id="acqPurchasePrice" placeholder="8500" min="0" />
+          </div>
+          <div>
+            <label>Status</label>
+            <input type="text" value="Pending" disabled />
+          </div>
+          <div class="full">
+            <label>Notes</label>
+            <input type="text" id="acqNotes" placeholder="Vehicle details and context" />
+          </div>
+        </div>
+        <div id="acqEmployeeResult" style="display:none; margin-top:14px;"></div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+          <button class="btn-cancel" onclick="clearAcquisitionRequestForm()">Clear</button>
+          <button class="btn-save" onclick="submitAcquisitionRequest()">Submit Request</button>
+        </div>
+      </div>
+
+      <div class="summary" id="acqEmployeeSummary" style="margin-bottom:20px;">
+        <div class="sum-card"><div class="sum-label">My Requests</div><div class="sum-val">—</div></div>
+        <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">—</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>VIN</th>
+              <th>Price</th>
+              <th>Notes</th>
+              <th>Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="acqEmployeeBody">
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <div class="empty-icon">&#9723;</div>
+                  <div class="empty-title">Loading your acquisition requests...</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- ── My Sales Page ── -->
   <div class="page" id="mysalesPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
     <div class="page-hdr">
@@ -438,6 +541,39 @@
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeModal()">Cancel</button>
         <button class="btn-save" onclick="saveVehicle()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Acquisition Edit Modal (Admin) ── -->
+  <div class="modal-backdrop" id="acqModal">
+    <div class="modal">
+      <div class="modal-title">Edit Acquisition Request</div>
+      <div class="form-grid">
+        <div class="full">
+          <label>VIN</label>
+          <input type="text" id="acqEditVin" maxlength="17" style="font-family:var(--mono)" />
+        </div>
+        <div>
+          <label>Purchase Price ($)</label>
+          <input type="number" id="acqEditPrice" min="0" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="acqEditStatus">
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Denied">Denied</option>
+          </select>
+        </div>
+        <div class="full">
+          <label>Notes</label>
+          <input type="text" id="acqEditNotes" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeAcquisitionEditModal()">Cancel</button>
+        <button class="btn-save" onclick="saveAcquisitionEdit()">Save</button>
       </div>
     </div>
   </div>

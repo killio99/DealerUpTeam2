@@ -420,6 +420,16 @@ tbody tr:hover td {
     color: var(--warn-text);
 }
 
+.s-approved {
+    background: var(--success-bg);
+    color: var(--success-text);
+}
+
+.s-denied {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+}
+
 .s-sold {
     background: var(--bg);
     color: var(--muted);

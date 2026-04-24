@@ -203,7 +203,7 @@ window.db = {
         async getAll() {
             const { data, error } = await _client
                 .from('acquisition_forms')
-                .select('*, vehicle_inventory(*)')
+                .select('*')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             return data;
@@ -212,7 +212,7 @@ window.db = {
         async getById(acquisitionId) {
             const { data, error } = await _client
                 .from('acquisition_forms')
-                .select('*, vehicle_inventory(*)')
+                .select('*')
                 .eq('acquisition_id', acquisitionId)
                 .single();
             if (error) throw error;
@@ -239,15 +239,34 @@ window.db = {
             return data;
         },
 
-        async approve(acquisitionId) {
+        async update(acquisitionId, updates) {
             const { data, error } = await _client
                 .from('acquisition_forms')
-                .update({ status: 'Approved' })
+                .update(updates)
                 .eq('acquisition_id', acquisitionId)
                 .select()
                 .single();
             if (error) throw error;
             return data;
+        },
+
+        async updateStatus(acquisitionId, status) {
+            const { data, error } = await _client
+                .from('acquisition_forms')
+                .update({ status })
+                .eq('acquisition_id', acquisitionId)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+
+        async approve(acquisitionId) {
+            return this.updateStatus(acquisitionId, 'Approved');
+        },
+
+        async deny(acquisitionId) {
+            return this.updateStatus(acquisitionId, 'Denied');
         }
     },
 

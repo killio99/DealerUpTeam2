@@ -2,7 +2,24 @@
 let currentUser = null;
 
 // Maps DB role values to CSS class names used in styles.css
-const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
+const ROLE_CSS = {
+    admin: 'admin',
+    employee: 'employee',
+    'sales rep': 'employee',
+    salesrep: 'employee',
+};
+
+function normalizeRole(role) {
+    return String(role ?? '').trim().toLowerCase();
+}
+
+function isAdminRole(role) {
+    return normalizeRole(role) === 'admin';
+}
+
+function getRoleCssClass(role) {
+    return ROLE_CSS[normalizeRole(role)] ?? 'employee';
+}
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
@@ -15,9 +32,9 @@ async function doLogin() {
             document.getElementById('app').classList.add('visible');
             const badge = document.getElementById('headerRoleBadge');
             badge.textContent = currentUser.role;
-            badge.className = 'role-badge role-' + (ROLE_CSS[currentUser.role] ?? 'employee');
+            badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
             document.getElementById('headerUserName').textContent = currentUser.username;
-            if (currentUser.role === 'Admin') {
+            if (isAdminRole(currentUser.role)) {
                 document.getElementById('actionsHeader').textContent = 'Actions';
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             }
@@ -49,6 +66,7 @@ document.getElementById('loginPass').addEventListener('keydown', e => {
 // Populated from Supabase on login via loadInventory()
 let inventory = [];
 let editingVin = null;
+let editingAcquisitionId = null;
 
 async function loadInventory() {
     try {
@@ -69,7 +87,7 @@ function renderStats() {
 function renderTable() {
     const q = document.getElementById('searchInput').value.toLowerCase();
     const statusF = document.getElementById('statusFilter').value;
-    const isAdmin = currentUser && currentUser.role === 'Admin';
+    const isAdmin = isAdminRole(currentUser?.role);
 
     const filtered = inventory.filter(v => {
         const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) || (v.model ?? '').toLowerCase().includes(q) || (v.vin ?? '').toLowerCase().includes(q);
@@ -166,17 +184,22 @@ document.getElementById('modal').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
 });
 
+document.getElementById('acqModal').addEventListener('click', function (e) {
+    if (e.target === this) closeAcquisitionEditModal();
+});
+
 // ── Tab Navigation ──────────────────────────────────
 async function switchTab(tab) {
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
     inventory: document.getElementById('inventoryPage'),
+        acquisitions: document.getElementById('acquisitionsPage'),
     mysales: document.getElementById('mysalesPage'),
     transactions: document.getElementById('transactionsPage'),
     tradein: document.getElementById('tradeinPage'),
   };
   const tabs = document.querySelectorAll('.tab-btn');
-  const order = ['dashboard', 'inventory', 'mysales', 'transactions', 'tradein'];
+    const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein'];
 
   Object.values(pages).forEach(p => p.style.display = 'none');
   tabs.forEach(t => t.classList.remove('active'));
@@ -185,6 +208,7 @@ async function switchTab(tab) {
   tabs[order.indexOf(tab)].classList.add('active');
 
   if (tab === 'dashboard') await loadDashboard();
+    if (tab === 'acquisitions') await loadAcquisitions();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
 }
@@ -194,6 +218,211 @@ function clearFilters() {
     document.getElementById('searchInput').value = '';
     document.getElementById('statusFilter').value = '';
     renderTable();
+}
+
+// ── Acquisitions ─────────────────────────────────────
+async function loadAcquisitions() {
+    const roleLabel = document.getElementById('acqRoleLabel');
+    roleLabel.textContent = currentUser?.role ?? '';
+    roleLabel.className = 'role-badge role-' + getRoleCssClass(currentUser?.role);
+
+    const isAdmin = isAdminRole(currentUser?.role);
+    document.getElementById('acqAdminView').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('acqEmployeeView').style.display = isAdmin ? 'none' : 'block';
+
+    try {
+        const acquisitions = await db.acquisitions.getAll();
+        if (isAdmin) {
+            renderAcquisitionsAdmin(acquisitions);
+        } else {
+            renderAcquisitionsEmployee(acquisitions.filter(a => a.salesman_id === currentUser.user_id));
+        }
+    } catch (err) {
+        console.error('Failed to load acquisitions:', err.message);
+        const targetBodyId = isAdmin ? 'acqAdminBody' : 'acqEmployeeBody';
+        const colspan = isAdmin ? 8 : 6;
+        document.getElementById(targetBodyId).innerHTML = `<tr><td colspan="${colspan}"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+    }
+}
+
+function renderAcquisitionsAdmin(acquisitions) {
+    const pending = acquisitions.filter(a => a.status === 'Pending').length;
+    const approved = acquisitions.filter(a => a.status === 'Approved').length;
+    const denied = acquisitions.filter(a => a.status === 'Denied').length;
+    const pendingRows = acquisitions.filter(a => a.status === 'Pending');
+    document.getElementById('acqAdminSummary').innerHTML = `
+        <div class="sum-card"><div class="sum-label">Pending Approval</div><div class="sum-val">${pending}</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
+        <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">${denied}</div></div>
+    `;
+
+    const body = document.getElementById('acqAdminBody');
+    if (!pendingRows.length) {
+        body.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No pending approvals</div><div class="empty-sub">New employee acquisition requests will appear here.</div></div></td></tr>`;
+        return;
+    }
+
+    body.innerHTML = pendingRows.map(a => `
+        <tr>
+            <td>${a.acquisition_id}</td>
+            <td class="vin">${a.vin ?? '—'}</td>
+            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+            <td>${a.salesman_id ?? '—'}</td>
+            <td style="max-width:240px; font-size:12px; color:var(--muted);">${a.notes ? a.notes.substring(0, 80) + (a.notes.length > 80 ? '…' : '') : '—'}</td>
+            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn-sm" onclick="openAcquisitionEditModal(${a.acquisition_id})">Edit</button>
+                    <button class="btn-sm" onclick="approveAcquisition(${a.acquisition_id})">Approve</button>
+                    <button class="btn-sm danger" onclick="denyAcquisition(${a.acquisition_id})">Deny</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderAcquisitionsEmployee(myRequests) {
+    const total = myRequests.length;
+    const pending = myRequests.filter(a => a.status === 'Pending').length;
+    const approved = myRequests.filter(a => a.status === 'Approved').length;
+    document.getElementById('acqEmployeeSummary').innerHTML = `
+        <div class="sum-card"><div class="sum-label">My Requests</div><div class="sum-val">${total}</div></div>
+        <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
+    `;
+
+    const body = document.getElementById('acqEmployeeBody');
+    if (!myRequests.length) {
+        body.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No requests yet</div><div class="empty-sub">Submit your first acquisition request above.</div></div></td></tr>`;
+        return;
+    }
+
+    body.innerHTML = myRequests.map(a => `
+        <tr>
+            <td>${a.acquisition_id}</td>
+            <td class="vin">${a.vin ?? '—'}</td>
+            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+            <td style="max-width:260px; font-size:12px; color:var(--muted);">${a.notes ?? '—'}</td>
+            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+        </tr>
+    `).join('');
+}
+
+function clearAcquisitionRequestForm(hideResult = true) {
+    document.getElementById('acqVin').value = '';
+    document.getElementById('acqPurchasePrice').value = '';
+    document.getElementById('acqNotes').value = '';
+    if (hideResult) document.getElementById('acqEmployeeResult').style.display = 'none';
+}
+
+function showAcquisitionRequestResult(type, message) {
+    const el = document.getElementById('acqEmployeeResult');
+    el.style.display = 'block';
+    el.style.padding = '10px 14px';
+    el.style.borderRadius = 'var(--radius)';
+    el.style.fontSize = '13px';
+    if (type === 'success') {
+        el.style.background = 'var(--success-bg)';
+        el.style.color = 'var(--success-text)';
+        el.style.border = '1px solid #b7d98b';
+    } else {
+        el.style.background = 'var(--danger-bg)';
+        el.style.color = 'var(--danger-text)';
+        el.style.border = '1px solid #f7c1c1';
+    }
+    el.textContent = message;
+}
+
+async function submitAcquisitionRequest() {
+    const vin = document.getElementById('acqVin').value.trim().toUpperCase();
+    const purchasePrice = parseFloat(document.getElementById('acqPurchasePrice').value);
+    const notes = document.getElementById('acqNotes').value.trim();
+
+    if (!vin || Number.isNaN(purchasePrice)) {
+        showAcquisitionRequestResult('error', 'Please fill in VIN and purchase price.');
+        return;
+    }
+
+    try {
+        await db.acquisitions.insert({
+            vin,
+            purchase_price: purchasePrice,
+            status: 'Pending',
+            salesman_id: currentUser.user_id,
+            notes,
+        });
+        clearAcquisitionRequestForm(false);
+        showAcquisitionRequestResult('success', `Request submitted for VIN ${vin}.`);
+        await loadAcquisitions();
+    } catch (err) {
+        showAcquisitionRequestResult('error', 'Submission failed: ' + err.message);
+    }
+}
+
+async function approveAcquisition(acquisitionId) {
+    try {
+        await db.acquisitions.approve(acquisitionId);
+        await loadAcquisitions();
+    } catch (err) {
+        alert('Approve failed: ' + err.message);
+    }
+}
+
+async function denyAcquisition(acquisitionId) {
+    try {
+        await db.acquisitions.deny(acquisitionId);
+        await loadAcquisitions();
+    } catch (err) {
+        alert('Deny failed: ' + err.message + ' (Ensure acquisition_forms.status supports Denied)');
+    }
+}
+
+async function openAcquisitionEditModal(acquisitionId) {
+    try {
+        const acq = await db.acquisitions.getById(acquisitionId);
+        editingAcquisitionId = acquisitionId;
+        document.getElementById('acqEditVin').value = acq.vin ?? '';
+        document.getElementById('acqEditPrice').value = acq.purchase_price ?? '';
+        document.getElementById('acqEditStatus').value = acq.status ?? 'Pending';
+        document.getElementById('acqEditNotes').value = acq.notes ?? '';
+        document.getElementById('acqModal').classList.add('open');
+    } catch (err) {
+        alert('Failed to open acquisition edit: ' + err.message);
+    }
+}
+
+function closeAcquisitionEditModal() {
+    editingAcquisitionId = null;
+    document.getElementById('acqModal').classList.remove('open');
+}
+
+async function saveAcquisitionEdit() {
+    if (!editingAcquisitionId) return;
+
+    const vin = document.getElementById('acqEditVin').value.trim().toUpperCase();
+    const purchase_price = parseFloat(document.getElementById('acqEditPrice').value);
+    const status = document.getElementById('acqEditStatus').value;
+    const notes = document.getElementById('acqEditNotes').value.trim();
+
+    if (!vin || Number.isNaN(purchase_price)) {
+        alert('VIN and purchase price are required.');
+        return;
+    }
+
+    try {
+        await db.acquisitions.update(editingAcquisitionId, {
+            vin,
+            purchase_price,
+            status,
+            notes,
+        });
+        closeAcquisitionEditModal();
+        await loadAcquisitions();
+    } catch (err) {
+        alert('Save failed: ' + err.message);
+    }
 }
 
 // ── Transactions ─────────────────────────────────────
