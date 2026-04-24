@@ -357,10 +357,11 @@ function setTradeInMode(mode) {
 }
 
 function clearTradeInForm() {
-    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel', 'tiVin', 'tiCashValue', 'tiPurchaseVin', 'tiDiscountValue', 'tiNotes'].forEach(id => {
+    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel', 'tiVin', 
+     'tiMileage', 'tiCashValue', 'tiPurchaseVin', 'tiDiscountValue', 'tiNotes']
+    .forEach(id => {
         document.getElementById(id).value = '';
     });
-    document.getElementById('tiCondition').value = 'Good';
     document.getElementById('tiResult').style.display = 'none';
 }
 
@@ -370,7 +371,7 @@ async function submitTradeIn() {
     const make = document.getElementById('tiMake').value.trim();
     const model = document.getElementById('tiModel').value.trim();
     const vin = document.getElementById('tiVin').value.trim().toUpperCase();
-    const condition = document.getElementById('tiCondition').value;
+    const mileage = parseInt(document.getElementById('tiMileage').value) || 0;
     const notes = document.getElementById('tiNotes').value.trim();
 
     if (!customerName || !year || !model || !vin) {
@@ -379,7 +380,7 @@ async function submitTradeIn() {
     }
 
     let purchasePrice = 0;
-    let fullNotes = `Customer: ${customerName} | Condition: ${condition} | Mode: ${tradeInMode}`;
+    let fullNotes = `Customer: ${customerName} | Mode: ${tradeInMode}`;
 
     if (tradeInMode === 'cash') {
         purchasePrice = parseFloat(document.getElementById('tiCashValue').value) || 0;
@@ -394,6 +395,29 @@ async function submitTradeIn() {
     if (notes) fullNotes += ` | Notes: ${notes}`;
 
     try {
+        // Step 1: Check if this VIN already exists in inventory
+        let vehicleExists = false;
+        try {
+            await db.inventory.getByVin(vin);
+            vehicleExists = true;
+        } catch (_) {
+            vehicleExists = false;
+        }
+
+        // Step 2: If not, insert the trade-in vehicle into vehicle_inventory
+        if (!vehicleExists) {
+            await db.inventory.insert({
+                vin,
+                year,
+                make: make || null,
+                model,
+                mileage,
+                listed_sale: purchasePrice,
+                status: 'Pending',
+            });
+        }
+
+        // Step 3: Insert the acquisition record
         await db.acquisitions.insert({
             vin,
             purchase_price: purchasePrice,
@@ -402,8 +426,16 @@ async function submitTradeIn() {
             notes: fullNotes,
         });
 
-        showTradeInResult('success', `Trade-in submitted successfully for ${year} ${make} ${model} (${vin}).`);
+        // Step 4: Log it
+        await db.log.write(
+            currentUser.user_id,
+            `Trade-in submitted: ${year} ${make} ${model} (${vin}) by ${customerName}`,
+            null
+        );
+
+        showTradeInResult('success', `Trade-in submitted for ${year} ${make} ${model} (${vin}).`);
         clearTradeInForm();
+
     } catch (err) {
         console.error('Trade-in submission failed:', err.message);
         showTradeInResult('error', 'Submission failed: ' + err.message);
