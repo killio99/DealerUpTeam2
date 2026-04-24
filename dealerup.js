@@ -203,9 +203,10 @@ async function loadTransactions() {
 
     try {
         // fetch all three sources in parallel
-        const [sales, acquisitions] = await Promise.all([
+        const [sales, acquisitions, transactions] = await Promise.all([
             db.sales.getAll(),
             db.acquisitions.getAll(),
+            db.transactions.getAll(),
         ]);
 
         // normalize sales into a common shape
@@ -242,7 +243,19 @@ async function loadTransactions() {
         });
 
         // merge and sort by date, newest first
-        const all = [...saleRows, ...acqRows].sort((a, b) => {
+        const transRows = transactions.map(t => ({
+            type: t.transaction_type,
+            id: t.transaction_id,
+            vehicle: t.vehicle_details,
+            vin: '—',
+            customerOrNotes: t.customer_info,
+            amount: null,
+            date: t.transaction_date,
+            status: t.transaction_status,
+            typeCss: 'type-acquisition',
+        }));
+
+        const all = [...saleRows, ...acqRows, ...transRows].sort((a, b) => {
             return new Date(b.date ?? 0) - new Date(a.date ?? 0);
         });
 

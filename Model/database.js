@@ -328,5 +328,57 @@ window.db = {
             if (error) throw error;
             return data;
         }
-    }
+    },
+
+    // ── TRANSACTIONS ──────────────────────────────────────────────────────────
+
+    transactions: {
+        async getAll() {
+            const { data, error } = await _client
+                .from('transactions')
+                .select('*')
+                .order('transaction_date', { ascending: false });
+            if (error) throw error;
+            return data;
+        },
+
+        async getById(transactionId) {
+            const { data, error } = await _client
+                .from('transactions')
+                .select('*')
+                .eq('transaction_id', transactionId)
+                .single();
+            if (error) throw error;
+            return data;
+        },
+
+        async insert(transaction) {
+            const { data, error } = await _client
+                .from('transactions')
+                .insert([transaction])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+
+        async updateStatus(transactionId, status) {
+            const { data, error } = await _client
+                .from('transactions')
+                .update({ transaction_status: status })
+                .eq('transaction_id', transactionId)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+
+        async delete(transactionId) {
+            const { error } = await _client
+                .from('transactions')
+                .delete()
+                .eq('transaction_id', transactionId);
+            if (error) throw error;
+        }
+    },  
 };
