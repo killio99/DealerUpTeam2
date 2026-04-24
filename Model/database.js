@@ -267,6 +267,14 @@ window.db = {
 
         async deny(acquisitionId) {
             return this.updateStatus(acquisitionId, 'Denied');
+        },
+
+        async delete(acquisitionId) {
+            const { error } = await _client
+                .from('acquisition_forms')
+                .delete()
+                .eq('acquisition_id', acquisitionId);
+            if (error) throw error;
         }
     },
 

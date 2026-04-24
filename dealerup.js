@@ -67,6 +67,8 @@ document.getElementById('loginPass').addEventListener('keydown', e => {
 let inventory = [];
 let editingVin = null;
 let editingAcquisitionId = null;
+let employeeAcquisitionScope = 'mine';
+let approvingAcquisition = null;
 
 async function loadInventory() {
     try {
@@ -117,10 +119,35 @@ function renderTable() {
 // ── Modal ─────────────────────────────────────────────
 function openAddModal() {
     editingVin = null;
+    approvingAcquisition = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
+    document.getElementById('modalSaveBtn').textContent = 'Save';
     ['fYear', 'fMake', 'fModel', 'fVin', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
     document.getElementById('modal').classList.add('open');
+}
+
+async function openAcquisitionApprovalModal(acquisitionId) {
+    try {
+        const acq = await db.acquisitions.getById(acquisitionId);
+        approvingAcquisition = acq;
+        editingVin = null;
+
+        document.getElementById('modalTitle').textContent = 'Approve acquisition';
+        document.getElementById('modalSaveBtn').textContent = 'Approve & Add to Inventory';
+
+        document.getElementById('fYear').value = '';
+        document.getElementById('fMake').value = '';
+        document.getElementById('fModel').value = '';
+        document.getElementById('fVin').value = acq.vin ?? '';
+        document.getElementById('fMileage').value = '';
+        document.getElementById('fPrice').value = acq.purchase_price ?? '';
+        document.getElementById('fStatus').value = 'Available';
+
+        document.getElementById('modal').classList.add('open');
+    } catch (err) {
+        alert('Failed to open approval form: ' + err.message);
+    }
 }
 
 function openEditModal(vin) {
@@ -139,6 +166,7 @@ function openEditModal(vin) {
 }
 
 function closeModal() {
+    approvingAcquisition = null;
     document.getElementById('modal').classList.remove('open');
 }
 
@@ -159,11 +187,24 @@ async function saveVehicle() {
     try {
         if (editingVin) {
             await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+        } else if (approvingAcquisition) {
+            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            try {
+                await db.acquisitions.approve(approvingAcquisition.acquisition_id);
+            } catch (approveErr) {
+                try {
+                    await db.inventory.delete(vin);
+                } catch (rollbackErr) {
+                    console.warn('Inventory rollback failed after approval error:', rollbackErr.message);
+                }
+                throw approveErr;
+            }
         } else {
             await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
         }
         closeModal();
         await loadInventory();
+        await loadAcquisitions();
     } catch (err) {
         alert('Save failed: ' + err.message);
     }
@@ -235,14 +276,20 @@ async function loadAcquisitions() {
         if (isAdmin) {
             renderAcquisitionsAdmin(acquisitions);
         } else {
-            renderAcquisitionsEmployee(acquisitions.filter(a => a.salesman_id === currentUser.user_id));
+            renderAcquisitionsEmployee(acquisitions);
         }
     } catch (err) {
         console.error('Failed to load acquisitions:', err.message);
         const targetBodyId = isAdmin ? 'acqAdminBody' : 'acqEmployeeBody';
-        const colspan = isAdmin ? 8 : 6;
+        const colspan = isAdmin ? 8 : 7;
         document.getElementById(targetBodyId).innerHTML = `<tr><td colspan="${colspan}"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
     }
+}
+
+function setEmployeeAcquisitionScope(scope) {
+    if (scope !== 'mine' && scope !== 'all') return;
+    employeeAcquisitionScope = scope;
+    loadAcquisitions();
 }
 
 function renderAcquisitionsAdmin(acquisitions) {
@@ -250,6 +297,7 @@ function renderAcquisitionsAdmin(acquisitions) {
     const approved = acquisitions.filter(a => a.status === 'Approved').length;
     const denied = acquisitions.filter(a => a.status === 'Denied').length;
     const pendingRows = acquisitions.filter(a => a.status === 'Pending');
+    const approvedRows = acquisitions.filter(a => a.status === 'Approved');
     document.getElementById('acqAdminSummary').innerHTML = `
         <div class="sum-card"><div class="sum-label">Pending Approval</div><div class="sum-val">${pending}</div></div>
         <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
@@ -259,10 +307,8 @@ function renderAcquisitionsAdmin(acquisitions) {
     const body = document.getElementById('acqAdminBody');
     if (!pendingRows.length) {
         body.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No pending approvals</div><div class="empty-sub">New employee acquisition requests will appear here.</div></div></td></tr>`;
-        return;
-    }
-
-    body.innerHTML = pendingRows.map(a => `
+    } else {
+        body.innerHTML = pendingRows.map(a => `
         <tr>
             <td>${a.acquisition_id}</td>
             <td class="vin">${a.vin ?? '—'}</td>
@@ -274,35 +320,71 @@ function renderAcquisitionsAdmin(acquisitions) {
             <td>
                 <div class="action-btns">
                     <button class="btn-sm" onclick="openAcquisitionEditModal(${a.acquisition_id})">Edit</button>
-                    <button class="btn-sm" onclick="approveAcquisition(${a.acquisition_id})">Approve</button>
+                    <button class="btn-sm" onclick="openAcquisitionApprovalModal(${a.acquisition_id})">Approve</button>
                     <button class="btn-sm danger" onclick="denyAcquisition(${a.acquisition_id})">Deny</button>
                 </div>
             </td>
         </tr>
     `).join('');
+    }
+
+    const approvedBody = document.getElementById('acqAdminApprovedBody');
+    if (!approvedRows.length) {
+        approvedBody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No approved requests</div><div class="empty-sub">Approved acquisitions will appear here.</div></div></td></tr>`;
+        return;
+    }
+
+    approvedBody.innerHTML = approvedRows.map(a => `
+        <tr>
+            <td>${a.acquisition_id}</td>
+            <td class="vin">${a.vin ?? '—'}</td>
+            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+            <td>${a.salesman_id ?? '—'}</td>
+            <td style="max-width:240px; font-size:12px; color:var(--muted);">${a.notes ? a.notes.substring(0, 80) + (a.notes.length > 80 ? '…' : '') : '—'}</td>
+            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+        </tr>
+    `).join('');
 }
 
-function renderAcquisitionsEmployee(myRequests) {
-    const total = myRequests.length;
-    const pending = myRequests.filter(a => a.status === 'Pending').length;
-    const approved = myRequests.filter(a => a.status === 'Approved').length;
+function renderAcquisitionsEmployee(acquisitions) {
+    const mine = acquisitions.filter(a => a.salesman_id === currentUser.user_id);
+    const shown = employeeAcquisitionScope === 'all' ? acquisitions : mine;
+    const total = shown.length;
+    const pending = shown.filter(a => a.status === 'Pending').length;
+    const approved = shown.filter(a => a.status === 'Approved').length;
+    const summaryLabel = employeeAcquisitionScope === 'all' ? 'All Requests' : 'My Requests';
+
+    const mineBtn = document.getElementById('acqScopeMineBtn');
+    const allBtn = document.getElementById('acqScopeAllBtn');
+    mineBtn.style.background = employeeAcquisitionScope === 'mine' ? 'var(--accent)' : '';
+    mineBtn.style.color = employeeAcquisitionScope === 'mine' ? '#fff' : '';
+    mineBtn.style.borderColor = employeeAcquisitionScope === 'mine' ? 'var(--accent)' : '';
+    allBtn.style.background = employeeAcquisitionScope === 'all' ? 'var(--accent)' : '';
+    allBtn.style.color = employeeAcquisitionScope === 'all' ? '#fff' : '';
+    allBtn.style.borderColor = employeeAcquisitionScope === 'all' ? 'var(--accent)' : '';
+
     document.getElementById('acqEmployeeSummary').innerHTML = `
-        <div class="sum-card"><div class="sum-label">My Requests</div><div class="sum-val">${total}</div></div>
+        <div class="sum-card"><div class="sum-label">${summaryLabel}</div><div class="sum-val">${total}</div></div>
         <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
         <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
     `;
 
     const body = document.getElementById('acqEmployeeBody');
-    if (!myRequests.length) {
-        body.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No requests yet</div><div class="empty-sub">Submit your first acquisition request above.</div></div></td></tr>`;
+    if (!shown.length) {
+        const emptySub = employeeAcquisitionScope === 'all'
+            ? 'No acquisition requests found yet.'
+            : 'Submit your first acquisition request above.';
+        body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No requests yet</div><div class="empty-sub">${emptySub}</div></div></td></tr>`;
         return;
     }
 
-    body.innerHTML = myRequests.map(a => `
+    body.innerHTML = shown.map(a => `
         <tr>
             <td>${a.acquisition_id}</td>
             <td class="vin">${a.vin ?? '—'}</td>
             <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+            <td>${a.salesman_id === currentUser.user_id ? 'You' : (a.salesman_id ?? '—')}</td>
             <td style="max-width:260px; font-size:12px; color:var(--muted);">${a.notes ?? '—'}</td>
             <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
             <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
@@ -361,21 +443,27 @@ async function submitAcquisitionRequest() {
     }
 }
 
-async function approveAcquisition(acquisitionId) {
-    try {
-        await db.acquisitions.approve(acquisitionId);
-        await loadAcquisitions();
-    } catch (err) {
-        alert('Approve failed: ' + err.message);
-    }
-}
-
 async function denyAcquisition(acquisitionId) {
     try {
         await db.acquisitions.deny(acquisitionId);
         await loadAcquisitions();
     } catch (err) {
-        alert('Deny failed: ' + err.message + ' (Ensure acquisition_forms.status supports Denied)');
+        const msg = String(err?.message ?? '').toLowerCase();
+        const schemaDoesNotAllowDenied = msg.includes('acquisition_forms_status_check') || msg.includes('invalid input value for enum');
+
+        if (schemaDoesNotAllowDenied) {
+            try {
+                await db.acquisitions.delete(acquisitionId);
+                await loadAcquisitions();
+                alert('Request denied and removed.');
+                return;
+            } catch (deleteErr) {
+                alert('Deny failed: ' + deleteErr.message);
+                return;
+            }
+        }
+
+        alert('Deny failed: ' + err.message);
     }
 }
 
