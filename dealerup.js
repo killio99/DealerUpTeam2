@@ -1,5 +1,6 @@
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
+let saleFormLoadedDraftSnapshot = null;
 
 // Maps DB role values to CSS class names used in styles.css
 const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
@@ -363,6 +364,285 @@ function clearTradeInForm() {
         document.getElementById(id).value = '';
     });
     document.getElementById('tiResult').style.display = 'none';
+}
+
+function clearSaleForm() {
+    ['saleCustomerName', 'saleCustomerPhone', 'saleYear', 'saleMake', 'saleModel', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('saleDraftId').value = '';
+    saleFormLoadedDraftSnapshot = null;
+    document.getElementById('saleResult').style.display = 'none';
+}
+
+function getSaleFormData() {
+    return {
+        customerName: document.getElementById('saleCustomerName').value.trim(),
+        customerPhone: document.getElementById('saleCustomerPhone').value.trim(),
+        year: document.getElementById('saleYear').value.trim(),
+        make: document.getElementById('saleMake').value.trim(),
+        model: document.getElementById('saleModel').value.trim(),
+        vin: document.getElementById('saleVin').value.trim().toUpperCase(),
+        amount: document.getElementById('salePrice').value.trim(),
+        saleDate: document.getElementById('saleDate').value,
+        notes: document.getElementById('saleNotes').value.trim(),
+    };
+}
+
+function isSaleDraftDirty() {
+    const draftId = document.getElementById('saleDraftId').value;
+    if (!draftId || !saleFormLoadedDraftSnapshot) return false;
+    const current = getSaleFormData();
+    return Object.keys(current).some(key => current[key] !== saleFormLoadedDraftSnapshot[key]);
+}
+
+function openSaleForm() {
+    if (document.getElementById('saleFormSection').style.display === 'block' && isSaleDraftDirty()) {
+        const save = confirm('You have unsaved draft changes. Press OK to save as a draft, or Cancel to discard them.');
+        if (save) {
+            saveSaleDraft();
+        }
+    }
+
+    clearSaleForm();
+    const section = document.getElementById('saleFormSection');
+    section.style.display = 'block';
+    document.getElementById('saleDate').value = new Date().toISOString().slice(0, 10);
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeSaleForm() {
+    document.getElementById('saleFormSection').style.display = 'none';
+}
+
+function showSaleResult(type, message) {
+    const el = document.getElementById('saleResult');
+    el.style.display = 'block';
+    el.style.padding = '10px 14px';
+    el.style.borderRadius = 'var(--radius)';
+    el.style.fontSize = '13px';
+    if (type === 'success') {
+        el.style.background = 'var(--success-bg)';
+        el.style.color = 'var(--success-text)';
+        el.style.border = '1px solid #b7d98b';
+    } else {
+        el.style.background = 'var(--danger-bg)';
+        el.style.color = 'var(--danger-text)';
+        el.style.border = '1px solid #f7c1c1';
+    }
+    el.textContent = message;
+}
+
+function getSaleDrafts() {
+    try {
+        const raw = localStorage.getItem('saleDrafts');
+        return raw ? JSON.parse(raw) : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveSaleDrafts(drafts) {
+    localStorage.setItem('saleDrafts', JSON.stringify(drafts));
+}
+
+function saveSaleDraft() {
+    const customerName = document.getElementById('saleCustomerName').value.trim();
+    const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
+    const year = document.getElementById('saleYear').value.trim();
+    const make = document.getElementById('saleMake').value.trim();
+    const model = document.getElementById('saleModel').value.trim();
+    const vin = document.getElementById('saleVin').value.trim().toUpperCase();
+    const amount = document.getElementById('salePrice').value.trim();
+    const saleDate = document.getElementById('saleDate').value;
+    const notes = document.getElementById('saleNotes').value.trim();
+    const draftId = document.getElementById('saleDraftId').value || `draft-${Date.now()}`;
+
+    if (!customerName && !customerPhone && !year && !make && !model && !vin && !amount && !saleDate && !notes) {
+        showSaleResult('error', 'Enter at least one field before saving a draft.');
+        return;
+    }
+
+    const drafts = getSaleDrafts();
+    const existingIndex = drafts.findIndex(d => d.id === draftId);
+    const draft = {
+        id: draftId,
+        createdAt: Date.now(),
+        customerName,
+        customerPhone,
+        year,
+        make,
+        model,
+        vin,
+        amount,
+        saleDate,
+        notes,
+    };
+
+    if (existingIndex >= 0) {
+        drafts[existingIndex] = draft;
+    } else {
+        drafts.unshift(draft);
+    }
+
+    saveSaleDrafts(drafts);
+    document.getElementById('saleDraftId').value = draftId;
+    saleFormLoadedDraftSnapshot = getSaleFormData();
+    showSaleResult('success', 'Draft saved. Open View and Edit Drafts to continue later.');
+}
+
+function openDraftsModal() {
+    renderDraftsList();
+    document.getElementById('draftsModal').classList.add('open');
+}
+
+function closeDraftsModal() {
+    document.getElementById('draftsModal').classList.remove('open');
+}
+
+function renderDraftsList() {
+    const drafts = getSaleDrafts();
+    const container = document.getElementById('draftsList');
+    if (!drafts.length) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding:24px; text-align:left;">
+              <div class="empty-icon">&#9723;</div>
+              <div class="empty-title">No saved drafts</div>
+              <div class="empty-sub">Save sale drafts and return to them later.</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Draft</th>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Amount</th>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Vehicle</th>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${drafts.map(d => `
+            <tr>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.customerName || 'Untitled draft'}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.amount ? '$' + Number(d.amount).toLocaleString() : '—'}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.year || ''} ${d.make || ''} ${d.model || ''}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">
+                <button class="btn-sm" onclick="editDraft('${d.id}')">Edit</button>
+                <button class="btn-sm" style="color:var(--danger-text); border-color:#f7c1c1;" onclick="deleteDraft('${d.id}')">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+}
+
+function editDraft(id) {
+    const drafts = getSaleDrafts();
+    const draft = drafts.find(d => d.id === id);
+    if (!draft) return;
+
+    openSaleForm();
+    document.getElementById('saleDraftId').value = draft.id;
+    document.getElementById('saleCustomerName').value = draft.customerName;
+    document.getElementById('saleCustomerPhone').value = draft.customerPhone;
+    document.getElementById('saleYear').value = draft.year;
+    document.getElementById('saleMake').value = draft.make;
+    document.getElementById('saleModel').value = draft.model;
+    document.getElementById('saleVin').value = draft.vin;
+    document.getElementById('salePrice').value = draft.amount;
+    document.getElementById('saleDate').value = draft.saleDate || '';
+    document.getElementById('saleNotes').value = draft.notes;
+    saleFormLoadedDraftSnapshot = getSaleFormData();
+    closeDraftsModal();
+}
+
+function deleteDraft(id) {
+    const drafts = getSaleDrafts().filter(d => d.id !== id);
+    saveSaleDrafts(drafts);
+    renderDraftsList();
+}
+
+async function submitSale() {
+    const customerName = document.getElementById('saleCustomerName').value.trim();
+    const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
+    const year = parseInt(document.getElementById('saleYear').value);
+    const make = document.getElementById('saleMake').value.trim();
+    const model = document.getElementById('saleModel').value.trim();
+    const vin = document.getElementById('saleVin').value.trim().toUpperCase();
+    const amount = parseFloat(document.getElementById('salePrice').value);
+    const saleDate = document.getElementById('saleDate').value;
+    const notes = document.getElementById('saleNotes').value.trim();
+    const draftId = document.getElementById('saleDraftId').value;
+
+    if (!customerName || !year || !make || !model || !vin || !amount || !saleDate) {
+        showSaleResult('error', 'Please complete all required sale fields before submitting.');
+        return;
+    }
+
+    let vehicle;
+    try {
+        vehicle = await db.inventory.getByVin(vin);
+    } catch (err) {
+        showSaleResult('error', 'No vehicle found with that VIN in inventory. Please verify the VIN.');
+        return;
+    }
+
+    if (!vehicle) {
+        showSaleResult('error', 'No vehicle found with that VIN in inventory. Please verify the VIN.');
+        return;
+    }
+
+    if (vehicle.status === 'Sold') {
+        showSaleResult('error', 'This vehicle is already marked as sold in inventory.');
+        return;
+    }
+
+    const previousStatus = vehicle.status;
+    let inventoryUpdated = false;
+
+    try {
+        await db.inventory.update(vin, { status: 'Sold' });
+        inventoryUpdated = true;
+
+        const customer = await db.customers.insert({
+            customer_name: customerName,
+            phone: customerPhone || null,
+        });
+
+        await db.sales.insert({
+            VIN: vin,
+            customer_id: customer.customer_id,
+            salesman_id: currentUser.user_id,
+            amount_sold: amount,
+            status: 'Pending',
+            date_time: saleDate,
+            notes: notes || null,
+        });
+
+        if (draftId) {
+            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
+            saveSaleDrafts(drafts);
+        }
+
+        showSaleResult('success', `Sale recorded successfully for ${year} ${make} ${model} (${vin}).`);
+        clearSaleForm();
+        loadMySales();
+    } catch (err) {
+        if (inventoryUpdated) {
+            try {
+                await db.inventory.update(vin, { status: previousStatus });
+            } catch (rollbackErr) {
+                console.error('Failed to revert inventory status after sale submission error:', rollbackErr.message);
+            }
+        }
+        console.error('Sale submission failed:', err.message);
+        showSaleResult('error', 'Submission failed: ' + err.message);
+    }
 }
 
 async function submitTradeIn() {
