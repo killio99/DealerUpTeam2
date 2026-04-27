@@ -3,9 +3,26 @@ let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
 
 // Maps DB role values to CSS class names used in styles.css
-const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
+const ROLE_CSS = {
+    admin: 'admin',
+    employee: 'employee',
+    'sales rep': 'employee',
+    salesrep: 'employee',
+};
 const TRANSACTION_STATES = [ 'In Progress', 'Finalized' ];
 const TRANSACTION_FLOW = {'In Progress': ['Finalized'], 'Finalized': [] };
+
+function normalizeRole(role) {
+    return String(role ?? '').trim().toLowerCase();
+}
+
+function isAdminRole(role) {
+    return normalizeRole(role) === 'admin';
+}
+
+function getRoleCssClass(role) {
+    return ROLE_CSS[normalizeRole(role)] ?? 'employee';
+}
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
@@ -18,9 +35,9 @@ async function doLogin() {
             document.getElementById('app').classList.add('visible');
             const badge = document.getElementById('headerRoleBadge');
             badge.textContent = currentUser.role;
-            badge.className = 'role-badge role-' + (ROLE_CSS[currentUser.role] ?? 'employee');
+            badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
             document.getElementById('headerUserName').textContent = currentUser.username;
-            if (currentUser.role === 'Admin') {
+            if (isAdminRole(currentUser.role)) {
                 document.getElementById('actionsHeader').textContent = 'Actions';
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             }
@@ -163,6 +180,7 @@ if (sortCol) {
 // ── Modal ─────────────────────────────────────────────
 function openAddModal() {
     editingVin = null;
+    approvingAcquisition = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
     ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
@@ -172,6 +190,29 @@ function openAddModal() {
     for (let i = 0; i < 17; i++) vin += chars[Math.floor(Math.random() * chars.length)];
     document.getElementById('fVin').value = vin;
     document.getElementById('modal').classList.add('open');
+}
+
+async function openAcquisitionApprovalModal(acquisitionId) {
+    try {
+        const acq = await db.acquisitions.getById(acquisitionId);
+        approvingAcquisition = acq;
+        editingVin = null;
+
+        document.getElementById('modalTitle').textContent = 'Approve acquisition';
+        document.getElementById('modalSaveBtn').textContent = 'Approve & Add to Inventory';
+
+        document.getElementById('fYear').value = '';
+        document.getElementById('fMake').value = '';
+        document.getElementById('fModel').value = '';
+        document.getElementById('fVin').value = acq.vin ?? '';
+        document.getElementById('fMileage').value = '';
+        document.getElementById('fPrice').value = acq.purchase_price ?? '';
+        document.getElementById('fStatus').value = 'Available';
+
+        document.getElementById('modal').classList.add('open');
+    } catch (err) {
+        alert('Failed to open approval form: ' + err.message);
+    }
 }
 
 function openEditModal(vin) {
@@ -190,6 +231,7 @@ function openEditModal(vin) {
 }
 
 function closeModal() {
+    approvingAcquisition = null;
     document.getElementById('modal').classList.remove('open');
 }
 
@@ -210,11 +252,24 @@ async function saveVehicle() {
     try {
         if (editingVin) {
             await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+        } else if (approvingAcquisition) {
+            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            try {
+                await db.acquisitions.approve(approvingAcquisition.acquisition_id);
+            } catch (approveErr) {
+                try {
+                    await db.inventory.delete(vin);
+                } catch (rollbackErr) {
+                    console.warn('Inventory rollback failed after approval error:', rollbackErr.message);
+                }
+                throw approveErr;
+            }
         } else {
             await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
         }
         closeModal();
         await loadInventory();
+        await loadAcquisitions();
     } catch (err) {
         alert('Save failed: ' + err.message);
     }
@@ -235,17 +290,22 @@ document.getElementById('modal').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
 });
 
+document.getElementById('acqModal').addEventListener('click', function (e) {
+    if (e.target === this) closeAcquisitionEditModal();
+});
+
 // ── Tab Navigation ──────────────────────────────────
 async function switchTab(tab) {
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
     inventory: document.getElementById('inventoryPage'),
+        acquisitions: document.getElementById('acquisitionsPage'),
     mysales: document.getElementById('mysalesPage'),
     transactions: document.getElementById('transactionsPage'),
     tradein: document.getElementById('tradeinPage'),
   };
   const tabs = document.querySelectorAll('.tab-btn');
-  const order = ['dashboard', 'inventory', 'mysales', 'transactions', 'tradein'];
+    const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein'];
 
   Object.values(pages).forEach(p => p.style.display = 'none');
   tabs.forEach(t => t.classList.remove('active'));
