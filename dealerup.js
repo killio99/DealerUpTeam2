@@ -928,6 +928,26 @@ function showTradeInResult(type, message) {
     el.textContent = message;
 }
 
+function getTimeFilterRange() {
+    const val = document.getElementById('dashTimeFilter')?.value ?? 'all';
+    if (val === 'all') return null;
+    const now = new Date();
+    const start = new Date();
+    if (val === 'week') {
+        const day = now.getDay();
+        start.setDate(now.getDate() - day);
+    } else if (val === 'month') {
+        start.setDate(1);
+    } else if (val === 'quarter') {
+        const q = Math.floor(now.getMonth() / 3);
+        start.setMonth(q * 3, 1);
+    } else if (val === 'year') {
+        start.setMonth(0, 1);
+    }
+    start.setHours(0, 0, 0, 0);
+    return start;
+}
+
 // ── Dashboard ─────────────────────────────────────────
 async function loadDashboard() {
     try {
@@ -938,15 +958,23 @@ async function loadDashboard() {
             db.log.getAll(),
         ]);
 
+        const filterStart = getTimeFilterRange();
+        const filterSales = filterStart
+            ? sales.filter(s => s.date_time && new Date(s.date_time) >= filterStart)
+            : sales;
+        const filterAcq = filterStart
+            ? acquisitions.filter(a => a.created_at && new Date(a.created_at) >= filterStart)
+            : acquisitions;
+
         document.getElementById('dashTotal').textContent = inventoryData.length;
         document.getElementById('dashAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
-        document.getElementById('dashSales').textContent = sales.length;
-        const revenue = sales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
+        document.getElementById('dashSales').textContent = filterSales.length;
+        const revenue = filterSales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
 
-        document.getElementById('dashPending').textContent = sales.filter(s => s.status === 'Pending').length;
-        const tradeIns = acquisitions.filter(a => a.notes && a.notes.includes('Value:'));
-        const regularAcq = acquisitions.filter(a => !a.notes || !a.notes.includes('Value:'));
+        document.getElementById('dashPending').textContent = filterSales.filter(s => s.status === 'Pending').length;
+        const tradeIns = filterAcq.filter(a => a.notes && a.notes.includes('Value:'));
+        const regularAcq = filterAcq.filter(a => !a.notes || !a.notes.includes('Value:'));
         document.getElementById('dashAcquisitions').textContent = regularAcq.length;
         document.getElementById('dashTradeIns').textContent = tradeIns.length;
 
@@ -955,7 +983,7 @@ async function loadDashboard() {
         document.getElementById('dashBreakOnWay').textContent = inventoryData.filter(v => v.status === 'On The Way').length;
         document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
-        const recentSales = sales.slice(0, 5);
+        const recentSales = filterSales.slice(0, 5);
         document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
             <tr>
                 <td style="font-size:12px;">${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : s.vin}</td>
@@ -964,7 +992,7 @@ async function loadDashboard() {
             </tr>
         `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
 
-        const recentAcq = acquisitions.slice(0, 5);
+        const recentAcq = filterAcq.slice(0, 5);
         document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
             const isTradeIn = a.notes && a.notes.includes('Value:');
             return `<tr>
@@ -975,7 +1003,7 @@ async function loadDashboard() {
         }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
 
         // Charts
-        renderRevenueChart(sales);
+        renderRevenueChart(filterSales);
         renderStatusChart(inventoryData);
 
         // Activity log

@@ -163,9 +163,17 @@
   <div class="page" id="dashboardPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
     <div class="page-hdr">
       <div class="page-title">Dashboard</div>
-      <span id="dashboardRoleBadge"></span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="dashboardRoleBadge"></span>
+        <select id="dashTimeFilter" onchange="loadDashboard()" style="font-size:12px; padding:5px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); font-family:var(--font);">
+          <option value="all">All time</option>
+          <option value="week">This week</option>
+          <option value="month">This month</option>
+          <option value="quarter">This quarter</option>
+          <option value="year">This year</option>
+        </select>
+      </div>
     </div>
-
     <!-- Top stats row -->
     <div class="summary" style="grid-template-columns: repeat(4, 1fr); margin-bottom:28px;">
       <div class="sum-card">
