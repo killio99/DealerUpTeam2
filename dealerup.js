@@ -578,19 +578,19 @@ function saveSaleDrafts(drafts) {
 function saveSaleDraft() {
     const customerName = document.getElementById('saleCustomerName').value.trim();
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
-    const year = document.getElementById('saleYear').value.trim();
-    const make = document.getElementById('saleMake').value.trim();
-    const model = document.getElementById('saleModel').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
     const amount = document.getElementById('salePrice').value.trim();
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value || `draft-${Date.now()}`;
 
-    if (!customerName && !customerPhone && !year && !make && !model && !vin && !amount && !saleDate && !notes) {
+    if (!customerName && !customerPhone && !vin && !amount && !saleDate && !notes) {
         showSaleResult('error', 'Enter at least one field before saving a draft.');
         return;
     }
+
+    const vehicle = inventory.find(v => v.vin === vin);
+    const vehicleLabel = vehicle ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() : '';
 
     const drafts = getSaleDrafts();
     const existingIndex = drafts.findIndex(d => d.id === draftId);
@@ -599,10 +599,8 @@ function saveSaleDraft() {
         createdAt: Date.now(),
         customerName,
         customerPhone,
-        year,
-        make,
-        model,
         vin,
+        vehicleLabel,
         amount,
         saleDate,
         notes,
@@ -617,7 +615,8 @@ function saveSaleDraft() {
     saveSaleDrafts(drafts);
     document.getElementById('saleDraftId').value = draftId;
     saleFormLoadedDraftSnapshot = getSaleFormData();
-    showSaleResult('success', 'Draft saved. Open View and Edit Drafts to continue later.');
+    renderDraftsList();
+    showSaleResult('success', 'Draft saved successfully!');
 }
 
 function openDraftsModal() {
@@ -658,7 +657,7 @@ function renderDraftsList() {
             <tr>
               <td style="padding:10px; border-bottom:1px solid var(--border);">${d.customerName || 'Untitled draft'}</td>
               <td style="padding:10px; border-bottom:1px solid var(--border);">${d.amount ? '$' + Number(d.amount).toLocaleString() : '—'}</td>
-              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.year || ''} ${d.make || ''} ${d.model || ''}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.vehicleLabel || d.vin || '—'}</td>
               <td style="padding:10px; border-bottom:1px solid var(--border);">
                 <button class="btn-sm" onclick="editDraft('${d.id}')">Edit</button>
                 <button class="btn-sm" style="color:var(--danger-text); border-color:#f7c1c1;" onclick="deleteDraft('${d.id}')">Delete</button>
@@ -679,10 +678,15 @@ function editDraft(id) {
     document.getElementById('saleDraftId').value = draft.id;
     document.getElementById('saleCustomerName').value = draft.customerName;
     document.getElementById('saleCustomerPhone').value = draft.customerPhone;
-    document.getElementById('saleYear').value = draft.year;
-    document.getElementById('saleMake').value = draft.make;
-    document.getElementById('saleModel').value = draft.model;
-    document.getElementById('saleVin').value = draft.vin;
+
+    const picker = document.getElementById('saleVehiclePicker');
+    if (picker && draft.vin) {
+        picker.value = draft.vin;
+        picker.dispatchEvent(new Event('change'));
+    } else {
+        document.getElementById('saleVin').value = draft.vin || '';
+    }
+
     document.getElementById('salePrice').value = draft.amount;
     document.getElementById('saleDate').value = draft.saleDate || '';
     document.getElementById('saleNotes').value = draft.notes;
@@ -699,9 +703,6 @@ function deleteDraft(id) {
 async function submitSale() {
     const customerName = document.getElementById('saleCustomerName').value.trim();
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
-    const year = parseInt(document.getElementById('saleYear').value);
-    const make = document.getElementById('saleMake').value.trim();
-    const model = document.getElementById('saleModel').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
     const amount = parseFloat(document.getElementById('salePrice').value);
     const saleDate = document.getElementById('saleDate').value;
@@ -748,7 +749,7 @@ async function submitSale() {
             customer_id: customer.customer_id,
             salesman_id: currentUser.user_id,
             amount_sold: amount,
-            status: 'Pending',
+            status: 'Finalized',
             date_time: saleDate,
             notes: notes || null,
         });
@@ -756,11 +757,13 @@ async function submitSale() {
         if (draftId) {
             const drafts = getSaleDrafts().filter(d => d.id !== draftId);
             saveSaleDrafts(drafts);
+            renderDraftsList();
         }
 
+        await loadInventory();
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
-        showSaleResult('success', `Sale recorded successfully for ${label} (${vin}).`);
+        showSaleResult('success', `Sale submitted successfully!`);
         clearSaleForm();
         loadMySales();
     } catch (err) {
