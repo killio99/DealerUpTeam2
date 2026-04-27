@@ -562,6 +562,8 @@ function isSaleDraftDirty() {
 }
 
 function openSaleForm() {
+    saleFormLoadedDraftSnapshot = null;
+    document.getElementById('saleDraftId').value = '';
     if (document.getElementById('saleFormSection').style.display === 'block' && isSaleDraftDirty()) {
         const save = confirm('You have unsaved draft changes. Press OK to save as a draft, or Cancel to discard them.');
         if (save) saveSaleDraft();
@@ -677,6 +679,7 @@ function saveSaleDraft() {
 
     saveSaleDrafts(drafts);
     saleFormLoadedDraftSnapshot = getSaleFormData();
+    document.getElementById('saleDraftId').value = draftId;
     renderDraftsList();
     showSaleResult('success', 'Draft saved successfully!');
 }
@@ -774,7 +777,7 @@ async function submitSale() {
     const customerName = document.getElementById('saleCustomerName').value.trim();
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
-    const amount = parseFloat(document.getElementById('salePrice').value);
+    const amount = Number(document.getElementById('salePrice').value);
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value;
@@ -834,6 +837,13 @@ async function submitSale() {
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
         showSaleResult('success', `Sale submitted successfully!`);
+        // remove draft if it existed
+        if (draftId) {
+            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
+            saveSaleDrafts(drafts);
+            renderDraftsList();
+            document.getElementById('saleDraftId').value = '';
+        }
         clearSaleForm();
         loadMySales();
     } catch (err) {
@@ -964,6 +974,10 @@ async function loadDashboard() {
             </tr>`;
         }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
 
+        // Charts
+        renderRevenueChart(sales);
+        renderStatusChart(inventoryData);
+
         // Activity log
         const logEl = document.getElementById('dashActivityLog');
         if (logEl) {
@@ -980,4 +994,88 @@ async function loadDashboard() {
     } catch (err) {
         console.error('Failed to load dashboard:', err.message);
     }
+}
+
+
+// ── Dashboard Charts ──────────────────────────────────
+let _revenueChart = null;
+let _statusChart = null;
+
+function renderRevenueChart(sales) {
+    const ctx = document.getElementById('dashRevenueChart');
+    if (!ctx) return;
+    if (_revenueChart) { _revenueChart.destroy(); _revenueChart = null; }
+
+    const recent = sales.slice(0, 10).reverse();
+    const labels = recent.map(s => {
+        const d = s.date_time ? new Date(s.date_time) : null;
+        return d ? (d.getMonth() + 1) + '/' + d.getDate() : s.sale_id;
+    });
+    const data = recent.map(s => s.amount_sold ?? 0);
+
+    _revenueChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Sale Amount',
+                data,
+                backgroundColor: '#1a3fa6',
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => '$' + ctx.parsed.y.toLocaleString()
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { font: { size: 11 }, autoSkip: false, maxRotation: 45 }, grid: { display: false } },
+                y: {
+                    ticks: { font: { size: 11 }, callback: v => '$' + v.toLocaleString() },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function renderStatusChart(inventoryData) {
+    const ctx = document.getElementById('dashStatusChart');
+    if (!ctx) return;
+    if (_statusChart) { _statusChart.destroy(); _statusChart = null; }
+
+    const available = inventoryData.filter(v => v.status === 'Available').length;
+    const pending = inventoryData.filter(v => v.status === 'Pending').length;
+    const sold = inventoryData.filter(v => v.status === 'Sold').length;
+    const onWay = inventoryData.filter(v => v.status === 'On The Way').length;
+
+    _statusChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Available', 'Pending', 'Sold', 'On The Way'],
+            datasets: [{
+                data: [available, pending, sold, onWay],
+                backgroundColor: ['#3b6d11', '#854f0b', '#78766e', '#1a3fa6'],
+                borderWidth: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { font: { size: 11 }, boxWidth: 10, padding: 12 }
+                }
+            }
+        }
+    });
 }
