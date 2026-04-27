@@ -28,6 +28,16 @@ window.db = {
             return data;
         },
 
+        async getMaybeByVin(vin) {
+            const { data, error } = await _client
+                .from('vehicle_inventory')
+                .select('*')
+                .eq('vin', vin)
+                .maybeSingle();
+            if (error) throw error;
+            return data;
+        },
+
         async getByStatus(status) {
             const { data, error } = await _client
                 .from('vehicle_inventory')
@@ -202,9 +212,9 @@ window.db = {
     acquisitions: {
         async getAll() {
             const { data, error } = await _client
-                .from('sales_forms')
-                .select('*, vehicle_inventory(*), customer_records(*)')
-                .order('sale_id', { ascending: false });
+                .from('acquisition_forms')
+                .select('*')
+                .order('created_at', { ascending: false });
             if (error) throw error;
             return data;
         },
@@ -266,7 +276,14 @@ window.db = {
         },
 
         async deny(acquisitionId) {
-            return this.updateStatus(acquisitionId, 'Denied');
+            const { data, error } = await _client
+                .from('acquisition_forms')
+                .delete()
+                .eq('acquisition_id', acquisitionId)
+                .select('*')
+                .single();
+            if (error) throw error;
+            return data;
         },
 
         async delete(acquisitionId) {
