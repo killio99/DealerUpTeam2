@@ -42,6 +42,13 @@ function doLogout() {
     document.getElementById('actionsHeader').textContent = '';
 }
 
+function generateVin() {
+    const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    let vin = '';
+    for (let i = 0; i < 17; i++) vin += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById('fVin').value = vin;
+}
+
 document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
 });
@@ -147,8 +154,13 @@ function renderTable() {
 function openAddModal() {
     editingVin = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
-    ['fYear', 'fMake', 'fModel', 'fVin', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
+    ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
+    // Auto-generate VIN silently
+    const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    let vin = '';
+    for (let i = 0; i < 17; i++) vin += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById('fVin').value = vin;
     document.getElementById('modal').classList.add('open');
 }
 
@@ -277,7 +289,7 @@ async function loadTransactions() {
 
         // normalize acquisitions — trade-ins and regular acquisitions
         const acqRows = acquisitions.map(a => {
-            const isTradeIn = a.notes && a.notes.includes('Mode: cash') || (a.notes && a.notes.includes('Mode: discount'));
+            const isTradeIn = a.notes && a.notes.includes('Value:');    
             return {
                 type: isTradeIn ? 'Trade-In' : 'Acquisition',
                 id: a.acquisition_id,
@@ -297,9 +309,9 @@ async function loadTransactions() {
         const transRows = transactions.map(t => ({
             type: t.transaction_type,
             id: t.transaction_id,
-            vehicle: t.vehicle_details,
-            vin: '—',
-            customerOrNotes: t.customer_info,
+            vehicle: t.vehicle_id ?? '—',
+            vin: t.vehicle_id ?? '—',
+            customerOrNotes: '—',
             amount: null,
             date: t.transaction_date,
             status: t.transaction_status,
@@ -350,7 +362,10 @@ async function loadMySales() {
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
     try {
         const sales = await db.sales.getAll();
-        const mine = sales.filter(s => s.salesman_id === currentUser.user_id);
+        console.log('All sales:', sales);
+        console.log('Current user id:', currentUser.user_id, typeof currentUser.user_id);
+        console.log('First sale salesman_id:', sales[0]?.salesman_id, typeof sales[0]?.salesman_id);
+        const mine = sales.filter(s => String(s.salesman_id) === String(currentUser.user_id));
         if (!mine.length) {
             tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No sales yet</div><div class="empty-sub">Your sales will appear here once recorded.</div></div></td></tr>`;
             document.getElementById('mySalesSummary').innerHTML = `
