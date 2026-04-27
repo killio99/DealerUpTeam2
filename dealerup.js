@@ -800,6 +800,7 @@ function clearSaleForm() {
     ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
     });
+    document.getElementById('saleDraftId').value = '';
     const picker = document.getElementById('saleVehiclePicker');
     if (picker) picker.value = '';
     const info = document.getElementById('saleSelectedVehicleInfo');
@@ -825,6 +826,8 @@ function isSaleDraftDirty() {
 }
 
 function openSaleForm() {
+    saleFormLoadedDraftSnapshot = null;
+    document.getElementById('saleDraftId').value = '';
     if (document.getElementById('saleFormSection').style.display === 'block' && isSaleDraftDirty()) {
         const save = confirm('You have unsaved draft changes. Press OK to save as a draft, or Cancel to discard them.');
         if (save) saveSaleDraft();
@@ -932,13 +935,15 @@ function saveSaleDraft() {
 
     if (existingIndex >= 0) {
         drafts[existingIndex] = draft;
+        document.getElementById('saleDraftId').value = draftId; // keep for further edits
     } else {
         drafts.unshift(draft);
+        document.getElementById('saleDraftId').value = ''; // clear for new drafts
     }
 
     saveSaleDrafts(drafts);
-    document.getElementById('saleDraftId').value = draftId;
     saleFormLoadedDraftSnapshot = getSaleFormData();
+    document.getElementById('saleDraftId').value = draftId;
     renderDraftsList();
     showSaleResult('success', 'Draft saved successfully!');
 }
@@ -950,6 +955,14 @@ function openDraftsModal() {
 
 function closeDraftsModal() {
     document.getElementById('draftsModal').classList.remove('open');
+}
+
+function openSubmitSaleConfirmModal() {
+    document.getElementById('submitSaleConfirmModal').classList.add('open');
+}
+
+function closeSubmitSaleConfirmModal() {
+    document.getElementById('submitSaleConfirmModal').classList.remove('open');
 }
 
 function renderDraftsList() {
@@ -1028,7 +1041,7 @@ async function submitSale() {
     const customerName = document.getElementById('saleCustomerName').value.trim();
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
-    const amount = parseFloat(document.getElementById('salePrice').value);
+    const amount = Number(document.getElementById('salePrice').value);
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value;
@@ -1088,6 +1101,13 @@ async function submitSale() {
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
         showSaleResult('success', `Sale submitted successfully!`);
+        // remove draft if it existed
+        if (draftId) {
+            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
+            saveSaleDrafts(drafts);
+            renderDraftsList();
+            document.getElementById('saleDraftId').value = '';
+        }
         clearSaleForm();
         loadMySales();
     } catch (err) {
@@ -1173,6 +1193,26 @@ function showTradeInResult(type, message) {
     el.textContent = message;
 }
 
+function getTimeFilterRange() {
+    const val = document.getElementById('dashTimeFilter')?.value ?? 'all';
+    if (val === 'all') return null;
+    const now = new Date();
+    const start = new Date();
+    if (val === 'week') {
+        const day = now.getDay();
+        start.setDate(now.getDate() - day);
+    } else if (val === 'month') {
+        start.setDate(1);
+    } else if (val === 'quarter') {
+        const q = Math.floor(now.getMonth() / 3);
+        start.setMonth(q * 3, 1);
+    } else if (val === 'year') {
+        start.setMonth(0, 1);
+    }
+    start.setHours(0, 0, 0, 0);
+    return start;
+}
+
 // ── Dashboard ─────────────────────────────────────────
 async function loadDashboard() {
     try {
@@ -1183,15 +1223,23 @@ async function loadDashboard() {
             db.log.getAll(),
         ]);
 
+        const filterStart = getTimeFilterRange();
+        const filterSales = filterStart
+            ? sales.filter(s => s.date_time && new Date(s.date_time) >= filterStart)
+            : sales;
+        const filterAcq = filterStart
+            ? acquisitions.filter(a => a.created_at && new Date(a.created_at) >= filterStart)
+            : acquisitions;
+
         document.getElementById('dashTotal').textContent = inventoryData.length;
         document.getElementById('dashAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
-        document.getElementById('dashSales').textContent = sales.length;
-        const revenue = sales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
+        document.getElementById('dashSales').textContent = filterSales.length;
+        const revenue = filterSales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
 
-        document.getElementById('dashPending').textContent = sales.filter(s => s.status === 'Pending').length;
-        const tradeIns = acquisitions.filter(a => a.notes && a.notes.includes('Value:'));
-        const regularAcq = acquisitions.filter(a => !a.notes || !a.notes.includes('Value:'));
+        document.getElementById('dashPending').textContent = filterSales.filter(s => s.status === 'Pending').length;
+        const tradeIns = filterAcq.filter(a => a.notes && a.notes.includes('Value:'));
+        const regularAcq = filterAcq.filter(a => !a.notes || !a.notes.includes('Value:'));
         document.getElementById('dashAcquisitions').textContent = regularAcq.length;
         document.getElementById('dashTradeIns').textContent = tradeIns.length;
 
@@ -1200,7 +1248,7 @@ async function loadDashboard() {
         document.getElementById('dashBreakOnWay').textContent = inventoryData.filter(v => v.status === 'On The Way').length;
         document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
-        const recentSales = sales.slice(0, 5);
+        const recentSales = filterSales.slice(0, 5);
         document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
             <tr>
                 <td style="font-size:12px;">${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : s.vin}</td>
@@ -1209,7 +1257,7 @@ async function loadDashboard() {
             </tr>
         `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
 
-        const recentAcq = acquisitions.slice(0, 5);
+        const recentAcq = filterAcq.slice(0, 5);
         document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
             const isTradeIn = a.notes && a.notes.includes('Value:');
             return `<tr>
@@ -1218,6 +1266,10 @@ async function loadDashboard() {
                 <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
             </tr>`;
         }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+
+        // Charts
+        renderRevenueChart(filterSales);
+        renderStatusChart(inventoryData);
 
         // Activity log
         const logEl = document.getElementById('dashActivityLog');
@@ -1235,4 +1287,88 @@ async function loadDashboard() {
     } catch (err) {
         console.error('Failed to load dashboard:', err.message);
     }
+}
+
+
+// ── Dashboard Charts ──────────────────────────────────
+let _revenueChart = null;
+let _statusChart = null;
+
+function renderRevenueChart(sales) {
+    const ctx = document.getElementById('dashRevenueChart');
+    if (!ctx) return;
+    if (_revenueChart) { _revenueChart.destroy(); _revenueChart = null; }
+
+    const recent = sales.slice(0, 10).reverse();
+    const labels = recent.map(s => {
+        const d = s.date_time ? new Date(s.date_time) : null;
+        return d ? (d.getMonth() + 1) + '/' + d.getDate() : s.sale_id;
+    });
+    const data = recent.map(s => s.amount_sold ?? 0);
+
+    _revenueChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Sale Amount',
+                data,
+                backgroundColor: '#1a3fa6',
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => '$' + ctx.parsed.y.toLocaleString()
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { font: { size: 11 }, autoSkip: false, maxRotation: 45 }, grid: { display: false } },
+                y: {
+                    ticks: { font: { size: 11 }, callback: v => '$' + v.toLocaleString() },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function renderStatusChart(inventoryData) {
+    const ctx = document.getElementById('dashStatusChart');
+    if (!ctx) return;
+    if (_statusChart) { _statusChart.destroy(); _statusChart = null; }
+
+    const available = inventoryData.filter(v => v.status === 'Available').length;
+    const pending = inventoryData.filter(v => v.status === 'Pending').length;
+    const sold = inventoryData.filter(v => v.status === 'Sold').length;
+    const onWay = inventoryData.filter(v => v.status === 'On The Way').length;
+
+    _statusChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Available', 'Pending', 'Sold', 'On The Way'],
+            datasets: [{
+                data: [available, pending, sold, onWay],
+                backgroundColor: ['#3b6d11', '#854f0b', '#78766e', '#1a3fa6'],
+                borderWidth: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { font: { size: 11 }, boxWidth: 10, padding: 12 }
+                }
+            }
+        }
+    });
 }
