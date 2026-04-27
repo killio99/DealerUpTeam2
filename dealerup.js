@@ -3,9 +3,26 @@ let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
 
 // Maps DB role values to CSS class names used in styles.css
-const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
+const ROLE_CSS = {
+    admin: 'admin',
+    employee: 'employee',
+    'sales rep': 'employee',
+    salesrep: 'employee',
+};
 const TRANSACTION_STATES = [ 'In Progress', 'Finalized' ];
 const TRANSACTION_FLOW = {'In Progress': ['Finalized'], 'Finalized': [] };
+
+function normalizeRole(role) {
+    return String(role ?? '').trim().toLowerCase();
+}
+
+function isAdminRole(role) {
+    return normalizeRole(role) === 'admin';
+}
+
+function getRoleCssClass(role) {
+    return ROLE_CSS[normalizeRole(role)] ?? 'employee';
+}
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
