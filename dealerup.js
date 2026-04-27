@@ -561,6 +561,8 @@ function isSaleDraftDirty() {
 }
 
 function openSaleForm() {
+    saleFormLoadedDraftSnapshot = null;
+    document.getElementById('saleDraftId').value = '';
     if (document.getElementById('saleFormSection').style.display === 'block' && isSaleDraftDirty()) {
         const save = confirm('You have unsaved draft changes. Press OK to save as a draft, or Cancel to discard them.');
         if (save) saveSaleDraft();
@@ -675,6 +677,7 @@ function saveSaleDraft() {
     saveSaleDrafts(drafts);
     document.getElementById('saleDraftId').value = draftId;
     saleFormLoadedDraftSnapshot = getSaleFormData();
+    document.getElementById('saleDraftId').value = draftId;
     renderDraftsList();
     showSaleResult('success', 'Draft saved successfully!');
 }
@@ -686,6 +689,14 @@ function openDraftsModal() {
 
 function closeDraftsModal() {
     document.getElementById('draftsModal').classList.remove('open');
+}
+
+function openSubmitSaleConfirmModal() {
+    document.getElementById('submitSaleConfirmModal').classList.add('open');
+}
+
+function closeSubmitSaleConfirmModal() {
+    document.getElementById('submitSaleConfirmModal').classList.remove('open');
 }
 
 function renderDraftsList() {
@@ -764,7 +775,7 @@ async function submitSale() {
     const customerName = document.getElementById('saleCustomerName').value.trim();
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
-    const amount = parseFloat(document.getElementById('salePrice').value);
+    const amount = Number(document.getElementById('salePrice').value);
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value;
@@ -824,6 +835,13 @@ async function submitSale() {
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
         showSaleResult('success', `Sale submitted successfully!`);
+        // remove draft if it existed
+        if (draftId) {
+            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
+            saveSaleDrafts(drafts);
+            renderDraftsList();
+            document.getElementById('saleDraftId').value = '';
+        }
         clearSaleForm();
         loadMySales();
     } catch (err) {

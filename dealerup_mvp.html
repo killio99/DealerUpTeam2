@@ -520,7 +520,7 @@
         <div style="display:flex; justify-content:flex-end; gap:8px;">
           <button class="btn-cancel" onclick="clearSaleForm()">Clear</button>
           <button class="btn-sm" onclick="saveSaleDraft()">Save Draft</button>
-          <button class="btn-save" onclick="submitSale()">Submit Sale</button>
+          <button class="btn-save" onclick="openSubmitSaleConfirmModal()">Submit Sale</button>
         </div>
       </div>
     </div>
@@ -531,6 +531,17 @@
         <div id="draftsList" style="min-height:180px;"></div>
         <div class="modal-actions">
           <button class="btn-cancel" onclick="closeDraftsModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="submitSaleConfirmModal" onclick="if(event.target === this) closeSubmitSaleConfirmModal()">
+      <div class="modal" style="max-width:420px;">
+        <div class="modal-title">Submit form as final?</div>
+        <div style="padding:16px 0; font-size:14px; color:var(--muted);">This will finalize the sale and update the inventory status.</div>
+        <div class="modal-actions" style="justify-content:flex-end; gap:8px; margin-top:16px;">
+          <button class="btn-cancel" onclick="closeSubmitSaleConfirmModal()">Cancel</button>
+          <button class="btn-save" onclick="closeSubmitSaleConfirmModal(); submitSale()">Confirm</button>
         </div>
       </div>
     </div>
