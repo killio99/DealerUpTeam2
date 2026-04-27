@@ -232,6 +232,7 @@ async function switchTab(tab) {
   tabs[order.indexOf(tab)].classList.add('active');
 
   if (tab === 'dashboard') await loadDashboard();
+  if (tab === 'tradein') generateTradeInVin();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
 }
@@ -242,6 +243,9 @@ function clearFilters() {
     document.getElementById('statusFilter').value = '';
     renderTable();
 }
+
+document.getElementById('statusFilter').addEventListener('change', () => renderTable());
+document.getElementById('searchInput').addEventListener('input', () => renderTable());
 
 // ── Transactions ─────────────────────────────────────
 async function loadTransactions() {
@@ -404,30 +408,27 @@ function setTradeInMode(mode) {
 }
 
 function clearTradeInForm() {
-    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel', 'tiVin', 
-     'tiMileage', 'tiCashValue', 'tiPurchaseVin', 'tiDiscountValue', 'tiNotes']
-    .forEach(id => {
-        document.getElementById(id).value = '';
-    });
+    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel',
+     'tiMileage', 'tiCashValue', 'tiNotes']
+    .forEach(id => { document.getElementById(id).value = ''; });
+    generateTradeInVin();
     document.getElementById('tiResult').style.display = 'none';
 }
 
 function clearSaleForm() {
-    ['saleCustomerName', 'saleCustomerPhone', 'saleYear', 'saleMake', 'saleModel', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
+    ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
     });
-    document.getElementById('saleDraftId').value = '';
-    saleFormLoadedDraftSnapshot = null;
-    document.getElementById('saleResult').style.display = 'none';
+    const picker = document.getElementById('saleVehiclePicker');
+    if (picker) picker.value = '';
+    const info = document.getElementById('saleSelectedVehicleInfo');
+    if (info) info.style.display = 'none';
 }
 
 function getSaleFormData() {
     return {
         customerName: document.getElementById('saleCustomerName').value.trim(),
         customerPhone: document.getElementById('saleCustomerPhone').value.trim(),
-        year: document.getElementById('saleYear').value.trim(),
-        make: document.getElementById('saleMake').value.trim(),
-        model: document.getElementById('saleModel').value.trim(),
         vin: document.getElementById('saleVin').value.trim().toUpperCase(),
         amount: document.getElementById('salePrice').value.trim(),
         saleDate: document.getElementById('saleDate').value,
@@ -445,16 +446,41 @@ function isSaleDraftDirty() {
 function openSaleForm() {
     if (document.getElementById('saleFormSection').style.display === 'block' && isSaleDraftDirty()) {
         const save = confirm('You have unsaved draft changes. Press OK to save as a draft, or Cancel to discard them.');
-        if (save) {
-            saveSaleDraft();
-        }
+        if (save) saveSaleDraft();
     }
-
     clearSaleForm();
+    populateSaleVehiclePicker();
     const section = document.getElementById('saleFormSection');
     section.style.display = 'block';
     document.getElementById('saleDate').value = new Date().toISOString().slice(0, 10);
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function populateSaleVehiclePicker() {
+    const picker = document.getElementById('saleVehiclePicker');
+    const available = inventory.filter(v => v.status === 'Available');
+    picker.innerHTML = `<option value="">— Select a vehicle —</option>` +
+        available.map(v => `<option value="${v.vin}">${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''} — ${v.vin}</option>`).join('');
+    picker.onchange = function() {
+        const v = inventory.find(x => x.vin === this.value);
+        if (!v) {
+            document.getElementById('saleSelectedVehicleInfo').style.display = 'none';
+            document.getElementById('saleVin').value = '';
+            return;
+        }
+        document.getElementById('saleVin').value = v.vin;
+        document.getElementById('saleSelectedVehicleInfo').innerHTML = `
+            <div style="display:flex; gap:24px; flex-wrap:wrap;">
+                <div><div class="sum-label">Vehicle</div><div style="font-weight:500;">${v.year ?? '—'} ${v.make ?? '—'} ${v.model ?? '—'}</div></div>
+                <div><div class="sum-label">VIN</div><div style="font-family:var(--mono); font-size:12px;">${v.vin}</div></div>
+                <div><div class="sum-label">Mileage</div><div>${v.mileage != null ? v.mileage.toLocaleString() + ' mi' : '—'}</div></div>
+                <div><div class="sum-label">Listed Price</div><div>${v.listed_sale != null ? '$' + v.listed_sale.toLocaleString() : '—'}</div></div>
+                <div><div class="sum-label">Status</div><div><span class="status s-${v.status?.toLowerCase()}">${v.status}</span></div></div>
+            </div>
+        `;
+        document.getElementById('saleSelectedVehicleInfo').style.display = 'block';
+        if (v.listed_sale) document.getElementById('salePrice').value = v.listed_sale;
+    };
 }
 
 function closeSaleForm() {
@@ -625,8 +651,8 @@ async function submitSale() {
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value;
 
-    if (!customerName || !year || !make || !model || !vin || !amount || !saleDate) {
-        showSaleResult('error', 'Please complete all required sale fields before submitting.');
+    if (!customerName || !vin || !amount || !saleDate) {
+        showSaleResult('error', 'Please select a vehicle, enter customer name, price, and date.');
         return;
     }
 
@@ -661,7 +687,7 @@ async function submitSale() {
         });
 
         await db.sales.insert({
-            VIN: vin,
+            vin: vin,
             customer_id: customer.customer_id,
             salesman_id: currentUser.user_id,
             amount_sold: amount,
@@ -675,7 +701,9 @@ async function submitSale() {
             saveSaleDrafts(drafts);
         }
 
-        showSaleResult('success', `Sale recorded successfully for ${year} ${make} ${model} (${vin}).`);
+        const v = inventory.find(x => x.vin === vin);
+        const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
+        showSaleResult('success', `Sale recorded successfully for ${label} (${vin}).`);
         clearSaleForm();
         loadMySales();
     } catch (err) {
@@ -691,77 +719,51 @@ async function submitSale() {
     }
 }
 
+function generateTradeInVin() {
+    const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    let vin = 'TI'; // prefix so trade-ins are identifiable
+    for (let i = 0; i < 15; i++) vin += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById('tiVin').value = vin;
+}
+
 async function submitTradeIn() {
     const customerName = document.getElementById('tiCustomerName').value.trim();
     const year = parseInt(document.getElementById('tiYear').value);
     const make = document.getElementById('tiMake').value.trim();
     const model = document.getElementById('tiModel').value.trim();
-    const vin = document.getElementById('tiVin').value.trim().toUpperCase();
     const mileage = parseInt(document.getElementById('tiMileage').value) || 0;
+    const value = parseFloat(document.getElementById('tiCashValue').value) || 0;
     const notes = document.getElementById('tiNotes').value.trim();
+    const vin = document.getElementById('tiVin').value.trim();
 
     if (!customerName || !year || !model || !vin) {
-        showTradeInResult('error', 'Please fill in customer name, year, model, and VIN.');
+        showTradeInResult('error', 'Please fill in customer name, year, and model.');
         return;
     }
 
-    let purchasePrice = 0;
-    let fullNotes = `Customer: ${customerName} | Mode: ${tradeInMode}`;
-
-    if (tradeInMode === 'cash') {
-        purchasePrice = parseFloat(document.getElementById('tiCashValue').value) || 0;
-        fullNotes += ` | Cash Value: $${purchasePrice.toLocaleString()}`;
-    } else {
-        const purchaseVin = document.getElementById('tiPurchaseVin').value.trim().toUpperCase();
-        const discountValue = parseFloat(document.getElementById('tiDiscountValue').value) || 0;
-        purchasePrice = discountValue;
-        fullNotes += ` | Applied as discount on VIN: ${purchaseVin} | Discount: $${discountValue.toLocaleString()}`;
-    }
-
-    if (notes) fullNotes += ` | Notes: ${notes}`;
+    const fullNotes = `Customer: ${customerName} | Value: $${value.toLocaleString()}${notes ? ' | Notes: ' + notes : ''}`;
 
     try {
-        // Step 1: Check if this VIN already exists in inventory
         let vehicleExists = false;
-        try {
-            await db.inventory.getByVin(vin);
-            vehicleExists = true;
-        } catch (_) {
-            vehicleExists = false;
-        }
+        try { await db.inventory.getByVin(vin); vehicleExists = true; } catch (_) {}
 
-        // Step 2: If not, insert the trade-in vehicle into vehicle_inventory
         if (!vehicleExists) {
             await db.inventory.insert({
-                vin,
-                year,
-                make: make || null,
-                model,
-                mileage,
-                listed_sale: purchasePrice,
-                status: 'Pending',
+                vin, year, make: make || null, model, mileage,
+                listed_sale: value, status: 'Pending',
             });
         }
 
-        // Step 3: Insert the acquisition record
         await db.acquisitions.insert({
-            vin,
-            purchase_price: purchasePrice,
-            status: 'Pending',
-            salesman_id: currentUser.user_id,
-            notes: fullNotes,
+            vin, purchase_price: value, status: 'Pending',
+            salesman_id: currentUser.user_id, notes: fullNotes,
         });
 
-        // Step 4: Log it
-        await db.log.write(
-            currentUser.user_id,
-            `Trade-in submitted: ${year} ${make} ${model} (${vin}) by ${customerName}`,
-            null
-        );
+        await db.log.write(currentUser.user_id,
+            `Trade-in submitted: ${year} ${make} ${model} (${vin}) by ${customerName}`, null);
 
-        showTradeInResult('success', `Trade-in submitted for ${year} ${make} ${model} (${vin}).`);
+        showTradeInResult('success', `Trade-in submitted for ${year} ${make} ${model}.`);
         clearTradeInForm();
-
     } catch (err) {
         console.error('Trade-in submission failed:', err.message);
         showTradeInResult('error', 'Submission failed: ' + err.message);
@@ -789,33 +791,30 @@ function showTradeInResult(type, message) {
 // ── Dashboard ─────────────────────────────────────────
 async function loadDashboard() {
     try {
-        const [inventory, sales, acquisitions] = await Promise.all([
+        const [inventoryData, sales, acquisitions, logEntries] = await Promise.all([
             db.inventory.getAll(),
             db.sales.getAll(),
             db.acquisitions.getAll(),
+            db.log.getAll(),
         ]);
 
-        // top stats
-        document.getElementById('dashTotal').textContent = inventory.length;
-        document.getElementById('dashAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
+        document.getElementById('dashTotal').textContent = inventoryData.length;
+        document.getElementById('dashAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashSales').textContent = sales.length;
         const revenue = sales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
 
-        // second row
         document.getElementById('dashPending').textContent = sales.filter(s => s.status === 'Pending').length;
-        const tradeIns = acquisitions.filter(a => a.notes && (a.notes.includes('Mode: cash') || a.notes.includes('Mode: discount')));
-        const regularAcq = acquisitions.filter(a => !a.notes || (!a.notes.includes('Mode: cash') && !a.notes.includes('Mode: discount')));
+        const tradeIns = acquisitions.filter(a => a.notes && a.notes.includes('Value:'));
+        const regularAcq = acquisitions.filter(a => !a.notes || !a.notes.includes('Value:'));
         document.getElementById('dashAcquisitions').textContent = regularAcq.length;
         document.getElementById('dashTradeIns').textContent = tradeIns.length;
 
-        // inventory breakdown
-        document.getElementById('dashBreakAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
-        document.getElementById('dashBreakPending').textContent = inventory.filter(v => v.status === 'Pending').length;
-        document.getElementById('dashBreakOnWay').textContent = inventory.filter(v => v.status === 'On The Way').length;
-        document.getElementById('dashBreakSold').textContent = inventory.filter(v => v.status === 'Sold').length;
+        document.getElementById('dashBreakAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
+        document.getElementById('dashBreakPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
+        document.getElementById('dashBreakOnWay').textContent = inventoryData.filter(v => v.status === 'On The Way').length;
+        document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
-        // recent sales table (last 5)
         const recentSales = sales.slice(0, 5);
         document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
             <tr>
@@ -825,17 +824,28 @@ async function loadDashboard() {
             </tr>
         `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
 
-        // recent acquisitions table (last 5)
         const recentAcq = acquisitions.slice(0, 5);
         document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
-            const isTradeIn = a.notes && (a.notes.includes('Mode: cash') || a.notes.includes('Mode: discount'));
-            return `
-            <tr>
+            const isTradeIn = a.notes && a.notes.includes('Value:');
+            return `<tr>
                 <td class="vin" style="font-size:11px;">${a.vin ?? '—'}</td>
                 <td><span class="status ${isTradeIn ? 'type-tradein' : 'type-acquisition'}">${isTradeIn ? 'Trade-In' : 'Acquisition'}</span></td>
                 <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
-            </tr>
-        `}).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+            </tr>`;
+        }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+
+        // Activity log
+        const logEl = document.getElementById('dashActivityLog');
+        if (logEl) {
+            const recent = logEntries.slice(0, 10);
+            logEl.innerHTML = recent.length ? recent.map(e => `
+                <tr>
+                    <td style="font-size:12px; color:var(--muted);">${e.timestamp ? new Date(e.timestamp).toLocaleString() : '—'}</td>
+                    <td style="font-size:12px;">${e.users?.username ?? 'System'}</td>
+                    <td style="font-size:12px;">${e.message}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No activity yet</div></div></td></tr>`;
+        }
 
     } catch (err) {
         console.error('Failed to load dashboard:', err.message);

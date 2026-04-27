@@ -263,6 +263,23 @@
       </div>
     </div>
 
+    <!-- Activity Log -->
+    <div class="table-wrap" style="padding:0; margin-bottom:28px;">
+      <div style="padding:16px 18px; border-bottom:1px solid var(--border); font-weight:500; font-size:13px;">Recent Activity</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>User</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="dashActivityLog">
+          <tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No activity yet</div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
   </div>
 
   <!-- ── My Sales Page ── -->
@@ -324,24 +341,12 @@
 
         <div style="margin-bottom:18px;">
           <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Vehicle Sold</div>
-          <div class="form-grid">
-            <div>
-              <label>Year</label>
-              <input type="number" id="saleYear" placeholder="2026" min="1900" max="2030" />
-            </div>
-            <div>
-              <label>Make</label>
-              <input type="text" id="saleMake" placeholder="Ford" />
-            </div>
-            <div class="full">
-              <label>Model</label>
-              <input type="text" id="saleModel" placeholder="F-150" />
-            </div>
-            <div class="full">
-              <label>VIN</label>
-              <input type="text" id="saleVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
-            </div>
-          </div>
+          <label>Select from Available Inventory</label>
+          <select id="saleVehiclePicker">
+            <option value="">— Select a vehicle —</option>
+          </select>
+          <input type="hidden" id="saleVin" />
+          <div id="saleSelectedVehicleInfo" style="display:none; margin-top:14px; padding:14px; background:var(--bg); border-radius:var(--radius); border:1px solid var(--border);"></div>
         </div>
 
         <div style="margin-bottom:18px;">
@@ -386,22 +391,6 @@
       <div class="page-title">Trade-In Form</div>
     </div>
 
-    <!-- Mode Toggle -->
-    <div style="display:flex; gap:8px; margin-bottom:24px;">
-      <button class="tradein-mode-btn active" id="modeCashBtn" onclick="setTradeInMode('cash')">
-        💵 Cash / Credit
-      </button>
-      <button class="tradein-mode-btn" id="modeDiscountBtn" onclick="setTradeInMode('discount')">
-        🏷️ Discount on Purchase
-      </button>
-    </div>
-
-    <!-- Mode description -->
-    <div class="todo-banner" id="modeDescription" style="margin-bottom:24px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span id="modeDescriptionText">Cash / Credit mode: the trade-in value will be paid out or credited directly to the customer.</span>
-    </div>
-
     <!-- Form -->
     <div class="table-wrap" style="padding:24px;">
 
@@ -427,8 +416,8 @@
             <input type="text" id="tiModel" placeholder="Camry" />
           </div>
           <div class="full">
-            <label>VIN</label>
-            <input type="text" id="tiVin" placeholder="17-character VIN" maxlength="17" style="font-family:var(--mono)" />
+            <label>VIN (auto-generated)</label>
+            <input type="text" id="tiVin" style="font-family:var(--mono); background:var(--bg); color:var(--muted);" readonly />
           </div>
           <div class="full">
             <label>Mileage</label>
@@ -437,27 +426,11 @@
         </div>
       </div>
 
-      <!-- Cash mode fields -->
-      <div id="cashFields" style="margin-bottom:18px;">
-        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Cash / Credit Details</div>
-        <label>Trade-In Value Offered ($)</label>
+      <div style="margin-bottom:18px;">
+        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Trade-In Value</div>
+        <label>Estimated Value Offered ($)</label>
         <input type="number" id="tiCashValue" placeholder="8000" min="0" />
       </div>
-
-      <!-- Discount mode fields -->
-      <div id="discountFields" style="display:none; margin-bottom:18px;">
-        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Discount Details</div>
-        <label>VIN of Vehicle Being Purchased</label>
-        <input type="text" id="tiPurchaseVin" placeholder="VIN of new vehicle" maxlength="17" style="font-family:var(--mono)" />
-        <label>Discount Amount Applied ($)</label>
-        <input type="number" id="tiDiscountValue" placeholder="5000" min="0" />
-      </div>
-
-      <div style="margin-bottom:18px;">
-        <label>Notes</label>
-        <input type="text" id="tiNotes" placeholder="Any additional details..." />
-      </div>
-
       <!-- Result message -->
       <div id="tiResult" style="display:none; margin-bottom:16px;"></div>
 
