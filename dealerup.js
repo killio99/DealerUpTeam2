@@ -536,6 +536,7 @@ function clearSaleForm() {
     ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
     });
+    document.getElementById('saleDraftId').value = '';
     const picker = document.getElementById('saleVehiclePicker');
     if (picker) picker.value = '';
     const info = document.getElementById('saleSelectedVehicleInfo');
@@ -668,12 +669,13 @@ function saveSaleDraft() {
 
     if (existingIndex >= 0) {
         drafts[existingIndex] = draft;
+        document.getElementById('saleDraftId').value = draftId; // keep for further edits
     } else {
         drafts.unshift(draft);
+        document.getElementById('saleDraftId').value = ''; // clear for new drafts
     }
 
     saveSaleDrafts(drafts);
-    document.getElementById('saleDraftId').value = draftId;
     saleFormLoadedDraftSnapshot = getSaleFormData();
     renderDraftsList();
     showSaleResult('success', 'Draft saved successfully!');
