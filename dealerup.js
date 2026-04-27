@@ -790,7 +790,7 @@ function setTradeInMode(mode) {
 
 function clearTradeInForm() {
     ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel',
-     'tiMileage', 'tiCashValue', 'tiNotes']
+     'tiMileage', 'tiCashValue']
     .forEach(id => { document.getElementById(id).value = ''; });
     generateTradeInVin();
     document.getElementById('tiResult').style.display = 'none';
@@ -1137,7 +1137,7 @@ async function submitTradeIn() {
     const model = document.getElementById('tiModel').value.trim();
     const mileage = parseInt(document.getElementById('tiMileage').value) || 0;
     const value = parseFloat(document.getElementById('tiCashValue').value) || 0;
-    const notes = document.getElementById('tiNotes').value.trim();
+    const notes = '';
     const vin = document.getElementById('tiVin').value.trim();
 
     if (!customerName || !year || !model || !vin) {
