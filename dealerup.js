@@ -1,6 +1,9 @@
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
+let approvingAcquisition = null;
+let acquisitionResultHideTimer = null;
+let acquisitionLoading = { id: null, action: null };
 
 // Maps DB role values to CSS class names used in styles.css
 const ROLE_CSS = {
@@ -78,6 +81,8 @@ let inventory = [];
 let editingVin = null;
 let sortCol = null;
 let sortDir = 'asc';
+let acquisitionsCache = [];
+let acquisitionScope = 'mine';
 
 function sortInventory(col) {
     if (sortCol === col) {
@@ -209,6 +214,7 @@ async function openAcquisitionApprovalModal(acquisitionId) {
         document.getElementById('fPrice').value = acq.purchase_price ?? '';
         document.getElementById('fStatus').value = 'Available';
 
+        setAcquisitionModalLoading(false);
         document.getElementById('modal').classList.add('open');
     } catch (err) {
         alert('Failed to open approval form: ' + err.message);
@@ -232,6 +238,7 @@ function openEditModal(vin) {
 
 function closeModal() {
     approvingAcquisition = null;
+    setAcquisitionModalLoading(false);
     document.getElementById('modal').classList.remove('open');
 }
 
@@ -253,7 +260,13 @@ async function saveVehicle() {
         if (editingVin) {
             await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
         } else if (approvingAcquisition) {
-            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            setAcquisitionModalLoading(true);
+            const existingVehicle = await db.inventory.getMaybeByVin(vin);
+            if (existingVehicle) {
+                await db.inventory.update(vin, { year, make, model, mileage, listed_sale, status });
+            } else {
+                await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            }
             try {
                 await db.acquisitions.approve(approvingAcquisition.acquisition_id);
             } catch (approveErr) {
@@ -264,6 +277,7 @@ async function saveVehicle() {
                 }
                 throw approveErr;
             }
+            setAcquisitionModalLoading(false);
         } else {
             await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
         }
@@ -271,6 +285,7 @@ async function saveVehicle() {
         await loadInventory();
         await loadAcquisitions();
     } catch (err) {
+        setAcquisitionModalLoading(false);
         alert('Save failed: ' + err.message);
     }
 }
@@ -314,6 +329,7 @@ async function switchTab(tab) {
   tabs[order.indexOf(tab)].classList.add('active');
 
   if (tab === 'dashboard') await loadDashboard();
+    if (tab === 'acquisitions') await loadAcquisitions();
   if (tab === 'tradein') generateTradeInVin();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
@@ -324,6 +340,254 @@ function clearFilters() {
     document.getElementById('searchInput').value = '';
     document.getElementById('statusFilter').value = '';
     renderTable();
+}
+
+function setEmployeeAcquisitionScope(scope) {
+    acquisitionScope = scope;
+    renderAcquisitionsEmployee();
+}
+
+function renderAcquisitionScopeButtons() {
+    const mineBtn = document.getElementById('acqScopeMineBtn');
+    const allBtn = document.getElementById('acqScopeAllBtn');
+    if (mineBtn) mineBtn.classList.toggle('active', acquisitionScope === 'mine');
+    if (allBtn) allBtn.classList.toggle('active', acquisitionScope === 'all');
+}
+
+async function loadAcquisitions() {
+    const roleLabel = document.getElementById('acqRoleLabel');
+    const isAdmin = isAdminRole(currentUser?.role);
+
+    if (roleLabel) {
+        roleLabel.textContent = currentUser?.role ?? '';
+        roleLabel.className = 'role-badge role-' + getRoleCssClass(currentUser?.role);
+    }
+
+    document.getElementById('acqAdminView').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('acqEmployeeView').style.display = isAdmin ? 'none' : 'block';
+
+    try {
+        acquisitionsCache = await db.acquisitions.getAll();
+        if (isAdmin) {
+            renderAcquisitionsAdmin();
+        } else {
+            renderAcquisitionsEmployee();
+        }
+    } catch (err) {
+        console.error('Failed to load acquisitions:', err.message);
+        const targetBodyId = isAdmin ? 'acqAdminBody' : 'acqEmployeeBody';
+        const colspan = isAdmin ? 8 : 7;
+        document.getElementById(targetBodyId).innerHTML = `<tr><td colspan="${colspan}"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+    }
+}
+
+function renderAcquisitionsAdmin() {
+    const acquisitions = acquisitionsCache;
+    const pending = acquisitions.filter(a => a.status === 'Pending');
+    const approved = acquisitions.filter(a => a.status === 'Approved');
+    const denied = acquisitions.filter(a => a.status === 'Denied');
+
+    document.getElementById('acqAdminSummary').innerHTML = `
+        <div class="sum-card"><div class="sum-label">Pending Approval</div><div class="sum-val">${pending.length}</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved.length}</div></div>
+        <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">${denied.length}</div></div>
+    `;
+
+    const pendingBody = document.getElementById('acqAdminBody');
+    const approvedBody = document.getElementById('acqAdminApprovedBody');
+
+    if (!pending.length) {
+        pendingBody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No pending approvals</div><div class="empty-sub">New employee requests will appear here.</div></div></td></tr>`;
+    } else {
+        pendingBody.innerHTML = pending.map(a => `
+            <tr>
+                <td>${a.acquisition_id}</td>
+                <td class="vin">${a.vin ?? '—'}</td>
+                <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+                <td>${a.salesman_id ?? '—'}</td>
+                <td style="max-width:240px; font-size:12px; color:var(--muted);">${a.notes ?? '—'}</td>
+                <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+                <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+                <td>
+                    <div class="action-btns">
+                        <button class="btn-sm ${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'approve' ? 'loading' : ''}" ${acquisitionLoading.id === a.acquisition_id ? 'disabled' : ''} onclick="openAcquisitionApprovalModal(${a.acquisition_id})">${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'approve' ? '<span class=\"spinner\"></span> Approving' : 'Edit / Approve'}</button>
+                        <button class="btn-sm danger ${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'deny' ? 'loading' : ''}" ${acquisitionLoading.id === a.acquisition_id ? 'disabled' : ''} onclick="denyAcquisition(${a.acquisition_id})">${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'deny' ? '<span class=\"spinner\"></span> Denying' : 'Deny'}</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    if (!approved.length) {
+        approvedBody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No approved requests yet</div></div></td></tr>`;
+    } else {
+        approvedBody.innerHTML = approved.map(a => `
+            <tr>
+                <td>${a.acquisition_id}</td>
+                <td class="vin">${a.vin ?? '—'}</td>
+                <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+                <td>${a.salesman_id ?? '—'}</td>
+                <td style="max-width:240px; font-size:12px; color:var(--muted);">${a.notes ?? '—'}</td>
+                <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+                <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+            </tr>
+        `).join('');
+    }
+}
+
+function getVisibleAcquisitionsForEmployee() {
+    const all = acquisitionsCache;
+    if (acquisitionScope === 'all') return all;
+    return all.filter(a => String(a.salesman_id) === String(currentUser?.user_id));
+}
+
+function renderAcquisitionsEmployee() {
+    const visible = getVisibleAcquisitionsForEmployee();
+    const mine = acquisitionsCache.filter(a => String(a.salesman_id) === String(currentUser?.user_id));
+    const pending = visible.filter(a => a.status === 'Pending').length;
+    const approved = visible.filter(a => a.status === 'Approved').length;
+
+    renderAcquisitionScopeButtons();
+
+    document.getElementById('acqEmployeeSummary').innerHTML = `
+        <div class="sum-card"><div class="sum-label">My Requests</div><div class="sum-val">${mine.length}</div></div>
+        <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
+    `;
+
+    const body = document.getElementById('acqEmployeeBody');
+    if (!visible.length) {
+        body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No acquisition requests yet</div><div class="empty-sub">Create a request using the form above.</div></div></td></tr>`;
+        return;
+    }
+
+    body.innerHTML = visible.map(a => `
+        <tr>
+            <td>${a.acquisition_id}</td>
+            <td class="vin">${a.vin ?? '—'}</td>
+            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
+            <td>${a.salesman_id ?? '—'}</td>
+            <td style="max-width:260px; font-size:12px; color:var(--muted);">${a.notes ?? '—'}</td>
+            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
+        </tr>
+    `).join('');
+}
+
+function clearAcquisitionRequestForm(hideResult = true) {
+    ['acqVin', 'acqPurchasePrice', 'acqNotes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    if (hideResult) document.getElementById('acqEmployeeResult').style.display = 'none';
+}
+
+function showAcquisitionRequestResult(type, message) {
+    const el = document.getElementById('acqEmployeeResult');
+    if (acquisitionResultHideTimer) {
+        clearTimeout(acquisitionResultHideTimer);
+        acquisitionResultHideTimer = null;
+    }
+    el.style.display = 'block';
+    el.style.padding = '10px 14px';
+    el.style.borderRadius = 'var(--radius)';
+    el.style.fontSize = '13px';
+    if (type === 'success') {
+        el.style.background = 'var(--success-bg)';
+        el.style.color = 'var(--success-text)';
+        el.style.border = '1px solid #b7d98b';
+    } else {
+        el.style.background = 'var(--danger-bg)';
+        el.style.color = 'var(--danger-text)';
+        el.style.border = '1px solid #f7c1c1';
+    }
+    el.textContent = message;
+
+    if (type === 'success') {
+        acquisitionResultHideTimer = setTimeout(() => {
+            el.style.display = 'none';
+            acquisitionResultHideTimer = null;
+        }, 2500);
+    }
+}
+
+function setAcquisitionModalLoading(isLoading) {
+    const btn = document.getElementById('modalSaveBtn');
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.classList.toggle('loading', isLoading);
+    btn.innerHTML = isLoading
+        ? '<span class="spinner"></span> Saving...'
+        : (approvingAcquisition ? 'Approve & Add to Inventory' : 'Save');
+}
+
+async function submitAcquisitionRequest() {
+    const vin = document.getElementById('acqVin').value.trim().toUpperCase();
+    const purchasePrice = parseFloat(document.getElementById('acqPurchasePrice').value);
+    const notes = document.getElementById('acqNotes').value.trim();
+
+    if (!vin || Number.isNaN(purchasePrice)) {
+        showAcquisitionRequestResult('error', 'Please fill in VIN and purchase price.');
+        return;
+    }
+
+    try {
+        const existingVehicle = await db.inventory.getMaybeByVin(vin);
+        if (!existingVehicle) {
+            await db.inventory.insert({
+                vin,
+                year: new Date().getFullYear(),
+                make: null,
+                model: 'Pending Acquisition',
+                mileage: 0,
+                listed_sale: purchasePrice,
+                status: 'Pending',
+                comments: notes || null,
+            });
+        }
+
+        await db.acquisitions.insert({
+            vin,
+            purchase_price: purchasePrice,
+            status: 'Pending',
+            salesman_id: currentUser.user_id,
+            notes: notes || null,
+        });
+
+        showAcquisitionRequestResult('success', `Request submitted for VIN ${vin}.`);
+        clearAcquisitionRequestForm(false);
+        await loadAcquisitions();
+        await loadDashboard();
+    } catch (err) {
+        showAcquisitionRequestResult('error', 'Submission failed: ' + err.message);
+    }
+}
+
+async function denyAcquisition(acquisitionId) {
+    if (!confirm('Deny this acquisition request?')) return;
+    try {
+        const acquisition = await db.acquisitions.getById(acquisitionId);
+        try {
+            const vehicle = await db.inventory.getMaybeByVin(acquisition.vin);
+            if (vehicle && vehicle.status === 'Pending' && vehicle.model === 'Pending Acquisition') {
+                await db.inventory.delete(acquisition.vin);
+            }
+        } catch (_inventoryErr) {
+            // If the placeholder inventory row is missing, there is nothing to clean up.
+        }
+
+        acquisitionLoading = { id: acquisitionId, action: 'deny' };
+        renderAcquisitionsAdmin();
+        await db.acquisitions.deny(acquisitionId);
+        acquisitionLoading = { id: null, action: null };
+        await loadAcquisitions();
+        await loadInventory();
+        await loadDashboard();
+    } catch (err) {
+        acquisitionLoading = { id: null, action: null };
+        renderAcquisitionsAdmin();
+        alert('Deny failed: ' + err.message);
+    }
 }
 
 document.getElementById('statusFilter').addEventListener('change', () => renderTable());
@@ -885,7 +1149,8 @@ async function submitTradeIn() {
 
     try {
         let vehicleExists = false;
-        try { await db.inventory.getByVin(vin); vehicleExists = true; } catch (_) {}
+        const existingVehicle = await db.inventory.getMaybeByVin(vin);
+        vehicleExists = !!existingVehicle;
 
         if (!vehicleExists) {
             await db.inventory.insert({
