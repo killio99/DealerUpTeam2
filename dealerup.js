@@ -3,6 +3,7 @@ let currentUser = null;
 
 // Maps DB role values to CSS class names used in styles.css
 const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
+const TRANSACTION_STATES = [ 'In Progress', 'Finalized' ];
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
@@ -50,6 +51,9 @@ document.getElementById('loginPass').addEventListener('keydown', e => {
 let inventory = [];
 let editingVin = null;
 
+let sortColumn = null;
+let sortAsc = true;
+
 async function loadInventory() {
     try {
         inventory = await db.inventory.getAll();
@@ -66,34 +70,60 @@ function renderStats() {
     document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
 }
 
+
 function renderTable() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    const statusF = document.getElementById('statusFilter').value;
-    const isAdmin = currentUser && currentUser.role === 'Admin';
+  const q = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+  const statusF = document.getElementById('statusFilter')?.value || '';
 
-    const filtered = inventory.filter(v => {
-        const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) || (v.model ?? '').toLowerCase().includes(q) || (v.vin ?? '').toLowerCase().includes(q);
-        const matchStatus = !statusF || v.status === statusF;
-        return matchSearch && matchStatus;
+  let filtered = inventory.filter(v => {
+    const matchSearch =
+      !q ||
+      (v.make ?? '').toLowerCase().includes(q) ||
+      (v.model ?? '').toLowerCase().includes(q) ||
+      (v.vin ?? '').toLowerCase().includes(q);
+
+    const matchStatus = !statusF || v.status === statusF;
+
+    return matchSearch && matchStatus;
+  });
+
+  // ✅ SORT BLOCK (this is the key fix)
+  if (sortColumn) {
+    filtered.sort((a, b) => {
+      let aVal = a[sortColumn];
+      let bVal = b[sortColumn];
+
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+      if (aVal > bVal) return sortAsc ? 1 : -1;
+      if (aVal < bVal) return sortAsc ? -1 : 1;
+      return 0;
     });
+  }
 
-    const tbody = document.getElementById('inventoryBody');
+  const tbody = document.getElementById('inventoryBody');
+  tbody.innerHTML = '';
 
-    if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No vehicles found</div><div class="empty-sub">Try adjusting your search or filters.</div></div></td></tr>`;
-        return;
-    }
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6">No vehicles found</td></tr>`;
+    return;
+  }
 
-    tbody.innerHTML = filtered.map(v => `
-        <tr>
-            <td>${v.year ?? '—'} ${v.make ?? '—'} ${v.model ?? '—'}</td>
-            <td class="vin">${v.vin}</td>
-            <td>${v.mileage != null ? v.mileage.toLocaleString() + ' mi' : '—'}</td>
-            <td>${v.listed_sale != null ? '$' + v.listed_sale.toLocaleString() : '—'}</td>
-            <td><span class="status s-${v.status?.toLowerCase()}">${v.status ?? '—'}</span></td>
-            <td>${isAdmin ? `<div class="action-btns"><button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button><button class="btn-sm danger" onclick="deleteVehicle('${v.vin}')">Remove</button></div>` : ''}</td>
-        </tr>
-    `).join('');
+  filtered.forEach(v => {
+    const row = document.createElement('tr');
+
+    row.innerHTML = `
+      <td>${v.year} ${v.make} ${v.model}</td>
+      <td>${v.vin}</td>
+      <td>${v.mileage?.toLocaleString() ?? '—'}</td>
+      <td>$${(v.listed_sale ?? 0).toLocaleString()}</td>
+      <td>${v.status}</td>
+      <td></td>
+    `;
+
+    tbody.appendChild(row);
+  });
 }
 
 // ── Modal ─────────────────────────────────────────────
@@ -161,6 +191,17 @@ async function deleteVehicle(vin) {
     }
 }
 
+function setSort(column) {
+  if (sortColumn === column) {
+    sortAsc = !sortAsc; // toggle direction
+  } else {
+    sortColumn = column;
+    sortAsc = true;
+  }
+
+  renderTable();
+}
+
 // Close modal on backdrop click
 document.getElementById('modal').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
@@ -208,7 +249,7 @@ async function loadTransactions() {
             db.acquisitions.getAll(),
             db.transactions.getAll(),
         ]);
-
+        
         // normalize sales into a common shape
         const saleRows = sales.map(s => ({
             type: 'Sale',
@@ -259,6 +300,7 @@ async function loadTransactions() {
             return new Date(b.date ?? 0) - new Date(a.date ?? 0);
         });
 
+
         // update summary cards
         const totalRevenue = saleRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
         const totalSpend = acqRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
@@ -283,7 +325,13 @@ async function loadTransactions() {
                 <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
                 <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
                 <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
-                <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
+                <td>
+                  <select onchange="advanceTransaction(${r.id}, this.value)">
+                    ${TRANSACTION_STATES.map(state => `
+                    <option value="${state}" ${r.status === state ? 'selected' : ''}> ${state} </option>
+                    `).join('')}
+                  </select>
+                </td>
             </tr>
         `).join('');
 
@@ -291,6 +339,25 @@ async function loadTransactions() {
         console.error('Failed to load transactions:', err.message);
         tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
     }
+}
+
+function updateTransactionStatus(transactionId, newStatus) {
+  if (!TRANSACTION_STATES.includes(newStatus)) {
+    throw new Error('Invalid transaction state');
+  }
+
+  return db.transactions.update(transactionId, {
+    transaction_status: newStatus
+  });
+}
+
+async function advanceTransaction(id, newStatus) {
+  try {
+    await updateTransactionStatus(id, newStatus);
+    await loadTransactions(); // refresh UI
+  } catch (err) {
+    alert('Failed to update transaction: ' + err.message);
+  }
 }
 
 // ── My Sales ──────────────────────────────────────────
