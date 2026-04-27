@@ -628,6 +628,14 @@ function closeDraftsModal() {
     document.getElementById('draftsModal').classList.remove('open');
 }
 
+function openSubmitSaleConfirmModal() {
+    document.getElementById('submitSaleConfirmModal').classList.add('open');
+}
+
+function closeSubmitSaleConfirmModal() {
+    document.getElementById('submitSaleConfirmModal').classList.remove('open');
+}
+
 function renderDraftsList() {
     const drafts = getSaleDrafts();
     const container = document.getElementById('draftsList');
