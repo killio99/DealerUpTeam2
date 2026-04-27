@@ -116,10 +116,24 @@ function renderTable() {
   const statusF = document.getElementById('statusFilter')?.value || '';
 
     const filtered = inventory.filter(v => {
-        const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) || (v.model ?? '').toLowerCase().includes(q) || (v.vin ?? '').toLowerCase().includes(q);
-        const matchStatus = !statusF || v.status === statusF;
-        return matchSearch && matchStatus;
+    const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) ||
+        (v.model ?? '').toLowerCase().includes(q) ||
+        (v.vin ?? '').toLowerCase().includes(q);
+
+    const matchStatus = !statusF || v.status === statusF;
+    return matchSearch && matchStatus;
+});
+
+if (sortCol) {
+    filtered.sort((a, b) => {
+        const aVal = getSortValue(a, sortCol);
+        const bVal = getSortValue(b, sortCol);
+
+        if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+        return 0;
     });
+}
 
   const tbody = document.getElementById('inventoryBody');
   tbody.innerHTML = '';
@@ -213,17 +227,6 @@ async function deleteVehicle(vin) {
     } catch (err) {
         alert('Delete failed: ' + err.message);
     }
-}
-
-function setSort(column) {
-  if (sortColumn === column) {
-    sortAsc = !sortAsc; // toggle direction
-  } else {
-    sortColumn = column;
-    sortAsc = true;
-  }
-
-  renderTable();
 }
 
 // Close modal on backdrop click
