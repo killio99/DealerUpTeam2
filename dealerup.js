@@ -5,6 +5,7 @@ let saleFormLoadedDraftSnapshot = null;
 // Maps DB role values to CSS class names used in styles.css
 const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
 const TRANSACTION_STATES = [ 'In Progress', 'Finalized' ];
+const TRANSACTION_FLOW = {'In Progress': ['Finalized'], 'Finalized': [] };
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
@@ -357,11 +358,12 @@ async function loadTransactions() {
                 <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
                 <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
                 <td>
-                  <select onchange="advanceTransaction(${r.id}, this.value)">
-                    ${TRANSACTION_STATES.map(state => `
-                    <option value="${state}" ${r.status === state ? 'selected' : ''}> ${state} </option>
+                <select onchange="advanceTransaction(${r.id}, '${r.status}', this.value)">
+                   <option value="${r.status}" selected>${r.status}</option>
+                   ${(TRANSACTION_FLOW[r.status] || []).map(state => `
+                    <option value="${state}">${state}</option>
                     `).join('')}
-                  </select>
+                </select>
                 </td>
             </tr>
         `).join('');
@@ -372,9 +374,14 @@ async function loadTransactions() {
     }
 }
 
-function updateTransactionStatus(transactionId, newStatus) {
+function updateTransactionStatus(transactionId, currentStatus, newStatus) {
   if (!TRANSACTION_STATES.includes(newStatus)) {
     throw new Error('Invalid transaction state');
+  }
+
+  const allowed = TRANSACTION_FLOW[currentStatus] || [];
+  if (!allowed.includes(newStatus)) {
+    throw new Error(`Cannot move from ${currentStatus} to ${newStatus}`);
   }
 
   return db.transactions.update(transactionId, {
@@ -382,12 +389,12 @@ function updateTransactionStatus(transactionId, newStatus) {
   });
 }
 
-async function advanceTransaction(id, newStatus) {
+async function advanceTransaction(id, currentStatus, newStatus) {
   try {
-    await updateTransactionStatus(id, newStatus);
-    await loadTransactions(); // refresh UI
+    await updateTransactionStatus(id, currentStatus, newStatus);
+    await loadTransactions(); //refreshes list for updated status
   } catch (err) {
-    alert('Failed to update transaction: ' + err.message);
+    alert(err.message);
   }
 }
 
