@@ -988,9 +988,10 @@ async function loadDashboard() {
             <tr>
                 <td style="font-size:12px;">${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : s.vin}</td>
                 <td>${s.amount_sold != null ? '$' + s.amount_sold.toLocaleString() : '—'}</td>
+                <td style="font-size:12px; color:var(--muted);">${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
                 <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
             </tr>
-        `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
+        `).join('') : `<tr><td colspan="4"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
 
         const recentAcq = filterAcq.slice(0, 5);
         document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
@@ -998,9 +999,10 @@ async function loadDashboard() {
             return `<tr>
                 <td class="vin" style="font-size:11px;">${a.vin ?? '—'}</td>
                 <td><span class="status ${isTradeIn ? 'type-tradein' : 'type-acquisition'}">${isTradeIn ? 'Trade-In' : 'Acquisition'}</span></td>
+                <td style="font-size:12px; color:var(--muted);">${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
                 <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
             </tr>`;
-        }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+        }).join('') : `<tr><td colspan="4"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
 
         // Charts
         renderRevenueChart(filterSales);

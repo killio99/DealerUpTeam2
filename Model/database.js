@@ -300,9 +300,9 @@ window.db = {
 
         async getAll() {
             const { data, error } = await _client
-                .from('business_log')
-                .select('log_id, user_id, message, record_id, timestamp, users(username, role)')
-                .order('timestamp', { ascending: false });
+                .from('acquisition_forms')
+                .select('*, vehicle_inventory(*)')
+                .order('acquisition_id', { ascending: false });
             if (error) throw error;
             return data;
         },
