@@ -50,6 +50,41 @@ document.getElementById('loginPass').addEventListener('keydown', e => {
 // Populated from Supabase on login via loadInventory()
 let inventory = [];
 let editingVin = null;
+let sortCol = null;
+let sortDir = 'asc';
+
+function sortInventory(col) {
+    if (sortCol === col) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortCol = col;
+        sortDir = 'asc';
+    }
+    renderTable();
+}
+
+function getSortValue(v, col) {
+    switch (col) {
+        case 'vehicle': return `${v.year ?? 0} ${v.make ?? ''} ${v.model ?? ''}`.toLowerCase();
+        case 'vin':     return (v.vin ?? '').toLowerCase();
+        case 'mileage': return v.mileage ?? -1;
+        case 'price':   return v.listed_sale ?? -1;
+        case 'status':  return (v.status ?? '').toLowerCase();
+        default:        return '';
+    }
+}
+
+function updateSortArrows() {
+    ['vehicle', 'vin', 'mileage', 'price', 'status'].forEach(col => {
+        const el = document.getElementById('sort-' + col);
+        if (!el) return;
+        if (sortCol === col) {
+            el.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
+        } else {
+            el.textContent = ' ⇅';
+        }
+    });
+}
 
 async function loadInventory() {
     try {
@@ -77,6 +112,17 @@ function renderTable() {
         const matchStatus = !statusF || v.status === statusF;
         return matchSearch && matchStatus;
     });
+
+    if (sortCol) {
+        filtered.sort((a, b) => {
+            const av = getSortValue(a, sortCol);
+            const bv = getSortValue(b, sortCol);
+            const cmp = typeof av === 'number' ? av - bv : av.localeCompare(bv);
+            return sortDir === 'asc' ? cmp : -cmp;
+        });
+    }
+
+    updateSortArrows();
 
     const tbody = document.getElementById('inventoryBody');
 

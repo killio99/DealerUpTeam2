@@ -97,11 +97,11 @@
       <table>
         <thead>
           <tr>
-            <th>Vehicle</th>
-            <th>VIN</th>
-            <th>Mileage</th>
-            <th>Price</th>
-            <th>Status</th>
+            <th class="sortable" onclick="sortInventory('vehicle')">Vehicle <span class="sort-arrow" id="sort-vehicle"></span></th>
+            <th class="sortable" onclick="sortInventory('vin')">VIN <span class="sort-arrow" id="sort-vin"></span></th>
+            <th class="sortable" onclick="sortInventory('mileage')">Mileage <span class="sort-arrow" id="sort-mileage"></span></th>
+            <th class="sortable" onclick="sortInventory('price')">Price <span class="sort-arrow" id="sort-price"></span></th>
+            <th class="sortable" onclick="sortInventory('status')">Status <span class="sort-arrow" id="sort-status"></span></th>
             <th id="actionsHeader"></th>
           </tr>
         </thead>

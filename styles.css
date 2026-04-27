@@ -382,6 +382,25 @@ th {
     text-transform: uppercase;
 }
 
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+th.sortable:hover {
+    color: var(--text);
+}
+
+.sort-arrow {
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+th.sortable:hover .sort-arrow {
+    opacity: 1;
+}
+
 td {
     padding: 11px 14px;
     border-bottom: 1px solid var(--border);
