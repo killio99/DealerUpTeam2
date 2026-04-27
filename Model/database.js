@@ -202,9 +202,9 @@ window.db = {
     acquisitions: {
         async getAll() {
             const { data, error } = await _client
-                .from('acquisition_forms')
-                .select('*')
-                .order('created_at', { ascending: false });
+                .from('sales_forms')
+                .select('*, vehicle_inventory(*), customer_records(*)')
+                .order('sale_id', { ascending: false });
             if (error) throw error;
             return data;
         },
@@ -300,8 +300,9 @@ window.db = {
 
         async getAll() {
             const { data, error } = await _client
-                .from('users')
-                .select('user_id, username, role');
+                .from('business_log')
+                .select('log_id, user_id, message, record_id, timestamp, users(username, role)')
+                .order('timestamp', { ascending: false });
             if (error) throw error;
             return data;
         },

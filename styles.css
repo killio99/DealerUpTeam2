@@ -381,6 +381,35 @@ th {
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
+/* ── Table header hover effect ── */
+th {
+  transition: background-color 0.15s ease, color 0.15s ease;
+  cursor: pointer; /* shows it's clickable for sorting */
+}
+
+th:hover {
+  background-color: #e6f4ff; /* light blue */
+  color: #0a66c2; /* optional: slightly darker blue text */
+}
+
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+th.sortable:hover {
+    color: var(--text);
+}
+
+.sort-arrow {
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+th.sortable:hover .sort-arrow {
+    opacity: 1;
+}
 
 td {
     padding: 11px 14px;

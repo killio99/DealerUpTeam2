@@ -1,25 +1,11 @@
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
+let saleFormLoadedDraftSnapshot = null;
 
 // Maps DB role values to CSS class names used in styles.css
-const ROLE_CSS = {
-    admin: 'admin',
-    employee: 'employee',
-    'sales rep': 'employee',
-    salesrep: 'employee',
-};
-
-function normalizeRole(role) {
-    return String(role ?? '').trim().toLowerCase();
-}
-
-function isAdminRole(role) {
-    return normalizeRole(role) === 'admin';
-}
-
-function getRoleCssClass(role) {
-    return ROLE_CSS[normalizeRole(role)] ?? 'employee';
-}
+const ROLE_CSS = { 'Admin': 'admin', 'Employee': 'employee' };
+const TRANSACTION_STATES = [ 'In Progress', 'Finalized' ];
+const TRANSACTION_FLOW = {'In Progress': ['Finalized'], 'Finalized': [] };
 
 async function doLogin() {
     const u = document.getElementById('loginUser').value.trim().toLowerCase();
@@ -58,6 +44,13 @@ function doLogout() {
     document.getElementById('actionsHeader').textContent = '';
 }
 
+function generateVin() {
+    const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    let vin = '';
+    for (let i = 0; i < 17; i++) vin += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById('fVin').value = vin;
+}
+
 document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
 });
@@ -66,9 +59,41 @@ document.getElementById('loginPass').addEventListener('keydown', e => {
 // Populated from Supabase on login via loadInventory()
 let inventory = [];
 let editingVin = null;
-let editingAcquisitionId = null;
-let employeeAcquisitionScope = 'mine';
-let approvingAcquisition = null;
+let sortCol = null;
+let sortDir = 'asc';
+
+function sortInventory(col) {
+    if (sortCol === col) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortCol = col;
+        sortDir = 'asc';
+    }
+    renderTable();
+}
+
+function getSortValue(v, col) {
+    switch (col) {
+        case 'vehicle': return `${v.year ?? 0} ${v.make ?? ''} ${v.model ?? ''}`.toLowerCase();
+        case 'vin':     return (v.vin ?? '').toLowerCase();
+        case 'mileage': return v.mileage ?? -1;
+        case 'price':   return v.listed_sale ?? -1;
+        case 'status':  return (v.status ?? '').toLowerCase();
+        default:        return '';
+    }
+}
+
+function updateSortArrows() {
+    ['vehicle', 'vin', 'mileage', 'price', 'status'].forEach(col => {
+        const el = document.getElementById('sort-' + col);
+        if (!el) return;
+        if (sortCol === col) {
+            el.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
+        } else {
+            el.textContent = ' ⇅';
+        }
+    });
+}
 
 async function loadInventory() {
     try {
@@ -86,34 +111,53 @@ function renderStats() {
     document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
 }
 
+
 function renderTable() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    const statusF = document.getElementById('statusFilter').value;
-    const isAdmin = isAdminRole(currentUser?.role);
+  const q = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+  const statusF = document.getElementById('statusFilter')?.value || '';
 
     const filtered = inventory.filter(v => {
-        const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) || (v.model ?? '').toLowerCase().includes(q) || (v.vin ?? '').toLowerCase().includes(q);
-        const matchStatus = !statusF || v.status === statusF;
-        return matchSearch && matchStatus;
+    const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) ||
+        (v.model ?? '').toLowerCase().includes(q) ||
+        (v.vin ?? '').toLowerCase().includes(q);
+
+    const matchStatus = !statusF || v.status === statusF;
+    return matchSearch && matchStatus;
+});
+
+if (sortCol) {
+    filtered.sort((a, b) => {
+        const aVal = getSortValue(a, sortCol);
+        const bVal = getSortValue(b, sortCol);
+
+        if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+        return 0;
     });
+}
 
-    const tbody = document.getElementById('inventoryBody');
+  const tbody = document.getElementById('inventoryBody');
+  tbody.innerHTML = '';
 
-    if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No vehicles found</div><div class="empty-sub">Try adjusting your search or filters.</div></div></td></tr>`;
-        return;
-    }
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6">No vehicles found</td></tr>`;
+    return;
+  }
 
-    tbody.innerHTML = filtered.map(v => `
-        <tr>
-            <td>${v.year ?? '—'} ${v.make ?? '—'} ${v.model ?? '—'}</td>
-            <td class="vin">${v.vin}</td>
-            <td>${v.mileage != null ? v.mileage.toLocaleString() + ' mi' : '—'}</td>
-            <td>${v.listed_sale != null ? '$' + v.listed_sale.toLocaleString() : '—'}</td>
-            <td><span class="status s-${v.status?.toLowerCase()}">${v.status ?? '—'}</span></td>
-            <td>${isAdmin ? `<div class="action-btns"><button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button><button class="btn-sm danger" onclick="deleteVehicle('${v.vin}')">Remove</button></div>` : ''}</td>
-        </tr>
-    `).join('');
+  filtered.forEach(v => {
+    const row = document.createElement('tr');
+
+    row.innerHTML = `
+      <td>${v.year} ${v.make} ${v.model}</td>
+      <td>${v.vin}</td>
+      <td>${v.mileage?.toLocaleString() ?? '—'}</td>
+      <td>$${(v.listed_sale ?? 0).toLocaleString()}</td>
+      <td>${v.status}</td>
+      <td></td>
+    `;
+
+    tbody.appendChild(row);
+  });
 }
 
 // ── Modal ─────────────────────────────────────────────
@@ -121,9 +165,13 @@ function openAddModal() {
     editingVin = null;
     approvingAcquisition = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
-    document.getElementById('modalSaveBtn').textContent = 'Save';
-    ['fYear', 'fMake', 'fModel', 'fVin', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
+    ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
+    // Auto-generate VIN silently
+    const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    let vin = '';
+    for (let i = 0; i < 17; i++) vin += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById('fVin').value = vin;
     document.getElementById('modal').classList.add('open');
 }
 
@@ -249,7 +297,7 @@ async function switchTab(tab) {
   tabs[order.indexOf(tab)].classList.add('active');
 
   if (tab === 'dashboard') await loadDashboard();
-    if (tab === 'acquisitions') await loadAcquisitions();
+  if (tab === 'tradein') generateTradeInVin();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
 }
@@ -261,257 +309,8 @@ function clearFilters() {
     renderTable();
 }
 
-// ── Acquisitions ─────────────────────────────────────
-async function loadAcquisitions() {
-    const roleLabel = document.getElementById('acqRoleLabel');
-    roleLabel.textContent = currentUser?.role ?? '';
-    roleLabel.className = 'role-badge role-' + getRoleCssClass(currentUser?.role);
-
-    const isAdmin = isAdminRole(currentUser?.role);
-    document.getElementById('acqAdminView').style.display = isAdmin ? 'block' : 'none';
-    document.getElementById('acqEmployeeView').style.display = isAdmin ? 'none' : 'block';
-
-    try {
-        const acquisitions = await db.acquisitions.getAll();
-        if (isAdmin) {
-            renderAcquisitionsAdmin(acquisitions);
-        } else {
-            renderAcquisitionsEmployee(acquisitions);
-        }
-    } catch (err) {
-        console.error('Failed to load acquisitions:', err.message);
-        const targetBodyId = isAdmin ? 'acqAdminBody' : 'acqEmployeeBody';
-        const colspan = isAdmin ? 8 : 7;
-        document.getElementById(targetBodyId).innerHTML = `<tr><td colspan="${colspan}"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
-    }
-}
-
-function setEmployeeAcquisitionScope(scope) {
-    if (scope !== 'mine' && scope !== 'all') return;
-    employeeAcquisitionScope = scope;
-    loadAcquisitions();
-}
-
-function renderAcquisitionsAdmin(acquisitions) {
-    const pending = acquisitions.filter(a => a.status === 'Pending').length;
-    const approved = acquisitions.filter(a => a.status === 'Approved').length;
-    const denied = acquisitions.filter(a => a.status === 'Denied').length;
-    const pendingRows = acquisitions.filter(a => a.status === 'Pending');
-    const approvedRows = acquisitions.filter(a => a.status === 'Approved');
-    document.getElementById('acqAdminSummary').innerHTML = `
-        <div class="sum-card"><div class="sum-label">Pending Approval</div><div class="sum-val">${pending}</div></div>
-        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
-        <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">${denied}</div></div>
-    `;
-
-    const body = document.getElementById('acqAdminBody');
-    if (!pendingRows.length) {
-        body.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No pending approvals</div><div class="empty-sub">New employee acquisition requests will appear here.</div></div></td></tr>`;
-    } else {
-        body.innerHTML = pendingRows.map(a => `
-        <tr>
-            <td>${a.acquisition_id}</td>
-            <td class="vin">${a.vin ?? '—'}</td>
-            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
-            <td>${a.salesman_id ?? '—'}</td>
-            <td style="max-width:240px; font-size:12px; color:var(--muted);">${a.notes ? a.notes.substring(0, 80) + (a.notes.length > 80 ? '…' : '') : '—'}</td>
-            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
-            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
-            <td>
-                <div class="action-btns">
-                    <button class="btn-sm" onclick="openAcquisitionEditModal(${a.acquisition_id})">Edit</button>
-                    <button class="btn-sm" onclick="openAcquisitionApprovalModal(${a.acquisition_id})">Approve</button>
-                    <button class="btn-sm danger" onclick="denyAcquisition(${a.acquisition_id})">Deny</button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-    }
-
-    const approvedBody = document.getElementById('acqAdminApprovedBody');
-    if (!approvedRows.length) {
-        approvedBody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No approved requests</div><div class="empty-sub">Approved acquisitions will appear here.</div></div></td></tr>`;
-        return;
-    }
-
-    approvedBody.innerHTML = approvedRows.map(a => `
-        <tr>
-            <td>${a.acquisition_id}</td>
-            <td class="vin">${a.vin ?? '—'}</td>
-            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
-            <td>${a.salesman_id ?? '—'}</td>
-            <td style="max-width:240px; font-size:12px; color:var(--muted);">${a.notes ? a.notes.substring(0, 80) + (a.notes.length > 80 ? '…' : '') : '—'}</td>
-            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
-            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
-        </tr>
-    `).join('');
-}
-
-function renderAcquisitionsEmployee(acquisitions) {
-    const mine = acquisitions.filter(a => a.salesman_id === currentUser.user_id);
-    const shown = employeeAcquisitionScope === 'all' ? acquisitions : mine;
-    const total = shown.length;
-    const pending = shown.filter(a => a.status === 'Pending').length;
-    const approved = shown.filter(a => a.status === 'Approved').length;
-    const summaryLabel = employeeAcquisitionScope === 'all' ? 'All Requests' : 'My Requests';
-
-    const mineBtn = document.getElementById('acqScopeMineBtn');
-    const allBtn = document.getElementById('acqScopeAllBtn');
-    mineBtn.style.background = employeeAcquisitionScope === 'mine' ? 'var(--accent)' : '';
-    mineBtn.style.color = employeeAcquisitionScope === 'mine' ? '#fff' : '';
-    mineBtn.style.borderColor = employeeAcquisitionScope === 'mine' ? 'var(--accent)' : '';
-    allBtn.style.background = employeeAcquisitionScope === 'all' ? 'var(--accent)' : '';
-    allBtn.style.color = employeeAcquisitionScope === 'all' ? '#fff' : '';
-    allBtn.style.borderColor = employeeAcquisitionScope === 'all' ? 'var(--accent)' : '';
-
-    document.getElementById('acqEmployeeSummary').innerHTML = `
-        <div class="sum-card"><div class="sum-label">${summaryLabel}</div><div class="sum-val">${total}</div></div>
-        <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
-        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
-    `;
-
-    const body = document.getElementById('acqEmployeeBody');
-    if (!shown.length) {
-        const emptySub = employeeAcquisitionScope === 'all'
-            ? 'No acquisition requests found yet.'
-            : 'Submit your first acquisition request above.';
-        body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No requests yet</div><div class="empty-sub">${emptySub}</div></div></td></tr>`;
-        return;
-    }
-
-    body.innerHTML = shown.map(a => `
-        <tr>
-            <td>${a.acquisition_id}</td>
-            <td class="vin">${a.vin ?? '—'}</td>
-            <td>${a.purchase_price != null ? '$' + Number(a.purchase_price).toLocaleString() : '—'}</td>
-            <td>${a.salesman_id === currentUser.user_id ? 'You' : (a.salesman_id ?? '—')}</td>
-            <td style="max-width:260px; font-size:12px; color:var(--muted);">${a.notes ?? '—'}</td>
-            <td>${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
-            <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
-        </tr>
-    `).join('');
-}
-
-function clearAcquisitionRequestForm(hideResult = true) {
-    document.getElementById('acqVin').value = '';
-    document.getElementById('acqPurchasePrice').value = '';
-    document.getElementById('acqNotes').value = '';
-    if (hideResult) document.getElementById('acqEmployeeResult').style.display = 'none';
-}
-
-function showAcquisitionRequestResult(type, message) {
-    const el = document.getElementById('acqEmployeeResult');
-    el.style.display = 'block';
-    el.style.padding = '10px 14px';
-    el.style.borderRadius = 'var(--radius)';
-    el.style.fontSize = '13px';
-    if (type === 'success') {
-        el.style.background = 'var(--success-bg)';
-        el.style.color = 'var(--success-text)';
-        el.style.border = '1px solid #b7d98b';
-    } else {
-        el.style.background = 'var(--danger-bg)';
-        el.style.color = 'var(--danger-text)';
-        el.style.border = '1px solid #f7c1c1';
-    }
-    el.textContent = message;
-}
-
-async function submitAcquisitionRequest() {
-    const vin = document.getElementById('acqVin').value.trim().toUpperCase();
-    const purchasePrice = parseFloat(document.getElementById('acqPurchasePrice').value);
-    const notes = document.getElementById('acqNotes').value.trim();
-
-    if (!vin || Number.isNaN(purchasePrice)) {
-        showAcquisitionRequestResult('error', 'Please fill in VIN and purchase price.');
-        return;
-    }
-
-    try {
-        await db.acquisitions.insert({
-            vin,
-            purchase_price: purchasePrice,
-            status: 'Pending',
-            salesman_id: currentUser.user_id,
-            notes,
-        });
-        clearAcquisitionRequestForm(false);
-        showAcquisitionRequestResult('success', `Request submitted for VIN ${vin}.`);
-        await loadAcquisitions();
-    } catch (err) {
-        showAcquisitionRequestResult('error', 'Submission failed: ' + err.message);
-    }
-}
-
-async function denyAcquisition(acquisitionId) {
-    try {
-        await db.acquisitions.deny(acquisitionId);
-        await loadAcquisitions();
-    } catch (err) {
-        const msg = String(err?.message ?? '').toLowerCase();
-        const schemaDoesNotAllowDenied = msg.includes('acquisition_forms_status_check') || msg.includes('invalid input value for enum');
-
-        if (schemaDoesNotAllowDenied) {
-            try {
-                await db.acquisitions.delete(acquisitionId);
-                await loadAcquisitions();
-                alert('Request denied and removed.');
-                return;
-            } catch (deleteErr) {
-                alert('Deny failed: ' + deleteErr.message);
-                return;
-            }
-        }
-
-        alert('Deny failed: ' + err.message);
-    }
-}
-
-async function openAcquisitionEditModal(acquisitionId) {
-    try {
-        const acq = await db.acquisitions.getById(acquisitionId);
-        editingAcquisitionId = acquisitionId;
-        document.getElementById('acqEditVin').value = acq.vin ?? '';
-        document.getElementById('acqEditPrice').value = acq.purchase_price ?? '';
-        document.getElementById('acqEditStatus').value = acq.status ?? 'Pending';
-        document.getElementById('acqEditNotes').value = acq.notes ?? '';
-        document.getElementById('acqModal').classList.add('open');
-    } catch (err) {
-        alert('Failed to open acquisition edit: ' + err.message);
-    }
-}
-
-function closeAcquisitionEditModal() {
-    editingAcquisitionId = null;
-    document.getElementById('acqModal').classList.remove('open');
-}
-
-async function saveAcquisitionEdit() {
-    if (!editingAcquisitionId) return;
-
-    const vin = document.getElementById('acqEditVin').value.trim().toUpperCase();
-    const purchase_price = parseFloat(document.getElementById('acqEditPrice').value);
-    const status = document.getElementById('acqEditStatus').value;
-    const notes = document.getElementById('acqEditNotes').value.trim();
-
-    if (!vin || Number.isNaN(purchase_price)) {
-        alert('VIN and purchase price are required.');
-        return;
-    }
-
-    try {
-        await db.acquisitions.update(editingAcquisitionId, {
-            vin,
-            purchase_price,
-            status,
-            notes,
-        });
-        closeAcquisitionEditModal();
-        await loadAcquisitions();
-    } catch (err) {
-        alert('Save failed: ' + err.message);
-    }
-}
+document.getElementById('statusFilter').addEventListener('change', () => renderTable());
+document.getElementById('searchInput').addEventListener('input', () => renderTable());
 
 // ── Transactions ─────────────────────────────────────
 async function loadTransactions() {
@@ -525,7 +324,7 @@ async function loadTransactions() {
             db.acquisitions.getAll(),
             db.transactions.getAll(),
         ]);
-
+        
         // normalize sales into a common shape
         const saleRows = sales.map(s => ({
             type: 'Sale',
@@ -543,7 +342,7 @@ async function loadTransactions() {
 
         // normalize acquisitions — trade-ins and regular acquisitions
         const acqRows = acquisitions.map(a => {
-            const isTradeIn = a.notes && a.notes.includes('Mode: cash') || (a.notes && a.notes.includes('Mode: discount'));
+            const isTradeIn = a.notes && a.notes.includes('Value:');    
             return {
                 type: isTradeIn ? 'Trade-In' : 'Acquisition',
                 id: a.acquisition_id,
@@ -563,9 +362,9 @@ async function loadTransactions() {
         const transRows = transactions.map(t => ({
             type: t.transaction_type,
             id: t.transaction_id,
-            vehicle: t.vehicle_details,
-            vin: '—',
-            customerOrNotes: t.customer_info,
+            vehicle: t.vehicle_id ?? '—',
+            vin: t.vehicle_id ?? '—',
+            customerOrNotes: '—',
             amount: null,
             date: t.transaction_date,
             status: t.transaction_status,
@@ -575,6 +374,7 @@ async function loadTransactions() {
         const all = [...saleRows, ...acqRows, ...transRows].sort((a, b) => {
             return new Date(b.date ?? 0) - new Date(a.date ?? 0);
         });
+
 
         // update summary cards
         const totalRevenue = saleRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
@@ -600,7 +400,14 @@ async function loadTransactions() {
                 <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
                 <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
                 <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
-                <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
+                <td>
+                <select onchange="advanceTransaction(${r.id}, '${r.status}', this.value)">
+                   <option value="${r.status}" selected>${r.status}</option>
+                   ${(TRANSACTION_FLOW[r.status] || []).map(state => `
+                    <option value="${state}">${state}</option>
+                    `).join('')}
+                </select>
+                </td>
             </tr>
         `).join('');
 
@@ -610,13 +417,40 @@ async function loadTransactions() {
     }
 }
 
+function updateTransactionStatus(transactionId, currentStatus, newStatus) {
+  if (!TRANSACTION_STATES.includes(newStatus)) {
+    throw new Error('Invalid transaction state');
+  }
+
+  const allowed = TRANSACTION_FLOW[currentStatus] || [];
+  if (!allowed.includes(newStatus)) {
+    throw new Error(`Cannot move from ${currentStatus} to ${newStatus}`);
+  }
+
+  return db.transactions.update(transactionId, {
+    transaction_status: newStatus
+  });
+}
+
+async function advanceTransaction(id, currentStatus, newStatus) {
+  try {
+    await updateTransactionStatus(id, currentStatus, newStatus);
+    await loadTransactions(); //refreshes list for updated status
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 // ── My Sales ──────────────────────────────────────────
 async function loadMySales() {
     const tbody = document.getElementById('mysalesBody');
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
     try {
         const sales = await db.sales.getAll();
-        const mine = sales.filter(s => s.salesman_id === currentUser.user_id);
+        console.log('All sales:', sales);
+        console.log('Current user id:', currentUser.user_id, typeof currentUser.user_id);
+        console.log('First sale salesman_id:', sales[0]?.salesman_id, typeof sales[0]?.salesman_id);
+        const mine = sales.filter(s => String(s.salesman_id) === String(currentUser.user_id));
         if (!mine.length) {
             tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No sales yet</div><div class="empty-sub">Your sales will appear here once recorded.</div></div></td></tr>`;
             document.getElementById('mySalesSummary').innerHTML = `
@@ -674,11 +508,325 @@ function setTradeInMode(mode) {
 }
 
 function clearTradeInForm() {
-    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel', 'tiVin', 'tiCashValue', 'tiPurchaseVin', 'tiDiscountValue', 'tiNotes'].forEach(id => {
+    ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel',
+     'tiMileage', 'tiCashValue', 'tiNotes']
+    .forEach(id => { document.getElementById(id).value = ''; });
+    generateTradeInVin();
+    document.getElementById('tiResult').style.display = 'none';
+}
+
+function clearSaleForm() {
+    ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
     });
-    document.getElementById('tiCondition').value = 'Good';
-    document.getElementById('tiResult').style.display = 'none';
+    const picker = document.getElementById('saleVehiclePicker');
+    if (picker) picker.value = '';
+    const info = document.getElementById('saleSelectedVehicleInfo');
+    if (info) info.style.display = 'none';
+}
+
+function getSaleFormData() {
+    return {
+        customerName: document.getElementById('saleCustomerName').value.trim(),
+        customerPhone: document.getElementById('saleCustomerPhone').value.trim(),
+        vin: document.getElementById('saleVin').value.trim().toUpperCase(),
+        amount: document.getElementById('salePrice').value.trim(),
+        saleDate: document.getElementById('saleDate').value,
+        notes: document.getElementById('saleNotes').value.trim(),
+    };
+}
+
+function isSaleDraftDirty() {
+    const draftId = document.getElementById('saleDraftId').value;
+    if (!draftId || !saleFormLoadedDraftSnapshot) return false;
+    const current = getSaleFormData();
+    return Object.keys(current).some(key => current[key] !== saleFormLoadedDraftSnapshot[key]);
+}
+
+function openSaleForm() {
+    if (document.getElementById('saleFormSection').style.display === 'block' && isSaleDraftDirty()) {
+        const save = confirm('You have unsaved draft changes. Press OK to save as a draft, or Cancel to discard them.');
+        if (save) saveSaleDraft();
+    }
+    clearSaleForm();
+    populateSaleVehiclePicker();
+    const section = document.getElementById('saleFormSection');
+    section.style.display = 'block';
+    document.getElementById('saleDate').value = new Date().toISOString().slice(0, 10);
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function populateSaleVehiclePicker() {
+    const picker = document.getElementById('saleVehiclePicker');
+    const available = inventory.filter(v => v.status === 'Available');
+    picker.innerHTML = `<option value="">— Select a vehicle —</option>` +
+        available.map(v => `<option value="${v.vin}">${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''} — ${v.vin}</option>`).join('');
+    picker.onchange = function() {
+        const v = inventory.find(x => x.vin === this.value);
+        if (!v) {
+            document.getElementById('saleSelectedVehicleInfo').style.display = 'none';
+            document.getElementById('saleVin').value = '';
+            return;
+        }
+        document.getElementById('saleVin').value = v.vin;
+        document.getElementById('saleSelectedVehicleInfo').innerHTML = `
+            <div style="display:flex; gap:24px; flex-wrap:wrap;">
+                <div><div class="sum-label">Vehicle</div><div style="font-weight:500;">${v.year ?? '—'} ${v.make ?? '—'} ${v.model ?? '—'}</div></div>
+                <div><div class="sum-label">VIN</div><div style="font-family:var(--mono); font-size:12px;">${v.vin}</div></div>
+                <div><div class="sum-label">Mileage</div><div>${v.mileage != null ? v.mileage.toLocaleString() + ' mi' : '—'}</div></div>
+                <div><div class="sum-label">Listed Price</div><div>${v.listed_sale != null ? '$' + v.listed_sale.toLocaleString() : '—'}</div></div>
+                <div><div class="sum-label">Status</div><div><span class="status s-${v.status?.toLowerCase()}">${v.status}</span></div></div>
+            </div>
+        `;
+        document.getElementById('saleSelectedVehicleInfo').style.display = 'block';
+        if (v.listed_sale) document.getElementById('salePrice').value = v.listed_sale;
+    };
+}
+
+function closeSaleForm() {
+    document.getElementById('saleFormSection').style.display = 'none';
+}
+
+function showSaleResult(type, message) {
+    const el = document.getElementById('saleResult');
+    el.style.display = 'block';
+    el.style.padding = '10px 14px';
+    el.style.borderRadius = 'var(--radius)';
+    el.style.fontSize = '13px';
+    if (type === 'success') {
+        el.style.background = 'var(--success-bg)';
+        el.style.color = 'var(--success-text)';
+        el.style.border = '1px solid #b7d98b';
+    } else {
+        el.style.background = 'var(--danger-bg)';
+        el.style.color = 'var(--danger-text)';
+        el.style.border = '1px solid #f7c1c1';
+    }
+    el.textContent = message;
+}
+
+function getSaleDrafts() {
+    try {
+        const raw = localStorage.getItem('saleDrafts');
+        return raw ? JSON.parse(raw) : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveSaleDrafts(drafts) {
+    localStorage.setItem('saleDrafts', JSON.stringify(drafts));
+}
+
+function saveSaleDraft() {
+    const customerName = document.getElementById('saleCustomerName').value.trim();
+    const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
+    const vin = document.getElementById('saleVin').value.trim().toUpperCase();
+    const amount = document.getElementById('salePrice').value.trim();
+    const saleDate = document.getElementById('saleDate').value;
+    const notes = document.getElementById('saleNotes').value.trim();
+    const draftId = document.getElementById('saleDraftId').value || `draft-${Date.now()}`;
+
+    if (!customerName && !customerPhone && !vin && !amount && !saleDate && !notes) {
+        showSaleResult('error', 'Enter at least one field before saving a draft.');
+        return;
+    }
+
+    const vehicle = inventory.find(v => v.vin === vin);
+    const vehicleLabel = vehicle ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() : '';
+
+    const drafts = getSaleDrafts();
+    const existingIndex = drafts.findIndex(d => d.id === draftId);
+    const draft = {
+        id: draftId,
+        createdAt: Date.now(),
+        customerName,
+        customerPhone,
+        vin,
+        vehicleLabel,
+        amount,
+        saleDate,
+        notes,
+    };
+
+    if (existingIndex >= 0) {
+        drafts[existingIndex] = draft;
+    } else {
+        drafts.unshift(draft);
+    }
+
+    saveSaleDrafts(drafts);
+    document.getElementById('saleDraftId').value = draftId;
+    saleFormLoadedDraftSnapshot = getSaleFormData();
+    renderDraftsList();
+    showSaleResult('success', 'Draft saved successfully!');
+}
+
+function openDraftsModal() {
+    renderDraftsList();
+    document.getElementById('draftsModal').classList.add('open');
+}
+
+function closeDraftsModal() {
+    document.getElementById('draftsModal').classList.remove('open');
+}
+
+function renderDraftsList() {
+    const drafts = getSaleDrafts();
+    const container = document.getElementById('draftsList');
+    if (!drafts.length) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding:24px; text-align:left;">
+              <div class="empty-icon">&#9723;</div>
+              <div class="empty-title">No saved drafts</div>
+              <div class="empty-sub">Save sale drafts and return to them later.</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Draft</th>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Amount</th>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Vehicle</th>
+            <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${drafts.map(d => `
+            <tr>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.customerName || 'Untitled draft'}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.amount ? '$' + Number(d.amount).toLocaleString() : '—'}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">${d.vehicleLabel || d.vin || '—'}</td>
+              <td style="padding:10px; border-bottom:1px solid var(--border);">
+                <button class="btn-sm" onclick="editDraft('${d.id}')">Edit</button>
+                <button class="btn-sm" style="color:var(--danger-text); border-color:#f7c1c1;" onclick="deleteDraft('${d.id}')">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+}
+
+function editDraft(id) {
+    const drafts = getSaleDrafts();
+    const draft = drafts.find(d => d.id === id);
+    if (!draft) return;
+
+    openSaleForm();
+    document.getElementById('saleDraftId').value = draft.id;
+    document.getElementById('saleCustomerName').value = draft.customerName;
+    document.getElementById('saleCustomerPhone').value = draft.customerPhone;
+
+    const picker = document.getElementById('saleVehiclePicker');
+    if (picker && draft.vin) {
+        picker.value = draft.vin;
+        picker.dispatchEvent(new Event('change'));
+    } else {
+        document.getElementById('saleVin').value = draft.vin || '';
+    }
+
+    document.getElementById('salePrice').value = draft.amount;
+    document.getElementById('saleDate').value = draft.saleDate || '';
+    document.getElementById('saleNotes').value = draft.notes;
+    saleFormLoadedDraftSnapshot = getSaleFormData();
+    closeDraftsModal();
+}
+
+function deleteDraft(id) {
+    const drafts = getSaleDrafts().filter(d => d.id !== id);
+    saveSaleDrafts(drafts);
+    renderDraftsList();
+}
+
+async function submitSale() {
+    const customerName = document.getElementById('saleCustomerName').value.trim();
+    const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
+    const vin = document.getElementById('saleVin').value.trim().toUpperCase();
+    const amount = parseFloat(document.getElementById('salePrice').value);
+    const saleDate = document.getElementById('saleDate').value;
+    const notes = document.getElementById('saleNotes').value.trim();
+    const draftId = document.getElementById('saleDraftId').value;
+
+    if (!customerName || !vin || !amount || !saleDate) {
+        showSaleResult('error', 'Please select a vehicle, enter customer name, price, and date.');
+        return;
+    }
+
+    let vehicle;
+    try {
+        vehicle = await db.inventory.getByVin(vin);
+    } catch (err) {
+        showSaleResult('error', 'No vehicle found with that VIN in inventory. Please verify the VIN.');
+        return;
+    }
+
+    if (!vehicle) {
+        showSaleResult('error', 'No vehicle found with that VIN in inventory. Please verify the VIN.');
+        return;
+    }
+
+    if (vehicle.status === 'Sold') {
+        showSaleResult('error', 'This vehicle is already marked as sold in inventory.');
+        return;
+    }
+
+    const previousStatus = vehicle.status;
+    let inventoryUpdated = false;
+
+    try {
+        await db.inventory.update(vin, { status: 'Sold' });
+        inventoryUpdated = true;
+
+        const customer = await db.customers.insert({
+            customer_name: customerName,
+            phone: customerPhone || null,
+        });
+
+        await db.sales.insert({
+            vin: vin,
+            customer_id: customer.customer_id,
+            salesman_id: currentUser.user_id,
+            amount_sold: amount,
+            status: 'Finalized',
+            date_time: saleDate,
+            notes: notes || null,
+        });
+
+        if (draftId) {
+            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
+            saveSaleDrafts(drafts);
+            renderDraftsList();
+        }
+
+        await loadInventory();
+        const v = inventory.find(x => x.vin === vin);
+        const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
+        showSaleResult('success', `Sale submitted successfully!`);
+        clearSaleForm();
+        loadMySales();
+    } catch (err) {
+        if (inventoryUpdated) {
+            try {
+                await db.inventory.update(vin, { status: previousStatus });
+            } catch (rollbackErr) {
+                console.error('Failed to revert inventory status after sale submission error:', rollbackErr.message);
+            }
+        }
+        console.error('Sale submission failed:', err.message);
+        showSaleResult('error', 'Submission failed: ' + err.message);
+    }
+}
+
+function generateTradeInVin() {
+    const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    let vin = 'TI'; // prefix so trade-ins are identifiable
+    for (let i = 0; i < 15; i++) vin += chars[Math.floor(Math.random() * chars.length)];
+    document.getElementById('tiVin').value = vin;
 }
 
 async function submitTradeIn() {
@@ -686,40 +834,38 @@ async function submitTradeIn() {
     const year = parseInt(document.getElementById('tiYear').value);
     const make = document.getElementById('tiMake').value.trim();
     const model = document.getElementById('tiModel').value.trim();
-    const vin = document.getElementById('tiVin').value.trim().toUpperCase();
-    const condition = document.getElementById('tiCondition').value;
+    const mileage = parseInt(document.getElementById('tiMileage').value) || 0;
+    const value = parseFloat(document.getElementById('tiCashValue').value) || 0;
     const notes = document.getElementById('tiNotes').value.trim();
+    const vin = document.getElementById('tiVin').value.trim();
 
     if (!customerName || !year || !model || !vin) {
-        showTradeInResult('error', 'Please fill in customer name, year, model, and VIN.');
+        showTradeInResult('error', 'Please fill in customer name, year, and model.');
         return;
     }
 
-    let purchasePrice = 0;
-    let fullNotes = `Customer: ${customerName} | Condition: ${condition} | Mode: ${tradeInMode}`;
-
-    if (tradeInMode === 'cash') {
-        purchasePrice = parseFloat(document.getElementById('tiCashValue').value) || 0;
-        fullNotes += ` | Cash Value: $${purchasePrice.toLocaleString()}`;
-    } else {
-        const purchaseVin = document.getElementById('tiPurchaseVin').value.trim().toUpperCase();
-        const discountValue = parseFloat(document.getElementById('tiDiscountValue').value) || 0;
-        purchasePrice = discountValue;
-        fullNotes += ` | Applied as discount on VIN: ${purchaseVin} | Discount: $${discountValue.toLocaleString()}`;
-    }
-
-    if (notes) fullNotes += ` | Notes: ${notes}`;
+    const fullNotes = `Customer: ${customerName} | Value: $${value.toLocaleString()}${notes ? ' | Notes: ' + notes : ''}`;
 
     try {
+        let vehicleExists = false;
+        try { await db.inventory.getByVin(vin); vehicleExists = true; } catch (_) {}
+
+        if (!vehicleExists) {
+            await db.inventory.insert({
+                vin, year, make: make || null, model, mileage,
+                listed_sale: value, status: 'Pending',
+            });
+        }
+
         await db.acquisitions.insert({
-            vin,
-            purchase_price: purchasePrice,
-            status: 'Pending',
-            salesman_id: currentUser.user_id,
-            notes: fullNotes,
+            vin, purchase_price: value, status: 'Pending',
+            salesman_id: currentUser.user_id, notes: fullNotes,
         });
 
-        showTradeInResult('success', `Trade-in submitted successfully for ${year} ${make} ${model} (${vin}).`);
+        await db.log.write(currentUser.user_id,
+            `Trade-in submitted: ${year} ${make} ${model} (${vin}) by ${customerName}`, null);
+
+        showTradeInResult('success', `Trade-in submitted for ${year} ${make} ${model}.`);
         clearTradeInForm();
     } catch (err) {
         console.error('Trade-in submission failed:', err.message);
@@ -748,33 +894,30 @@ function showTradeInResult(type, message) {
 // ── Dashboard ─────────────────────────────────────────
 async function loadDashboard() {
     try {
-        const [inventory, sales, acquisitions] = await Promise.all([
+        const [inventoryData, sales, acquisitions, logEntries] = await Promise.all([
             db.inventory.getAll(),
             db.sales.getAll(),
             db.acquisitions.getAll(),
+            db.log.getAll(),
         ]);
 
-        // top stats
-        document.getElementById('dashTotal').textContent = inventory.length;
-        document.getElementById('dashAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
+        document.getElementById('dashTotal').textContent = inventoryData.length;
+        document.getElementById('dashAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashSales').textContent = sales.length;
         const revenue = sales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
 
-        // second row
         document.getElementById('dashPending').textContent = sales.filter(s => s.status === 'Pending').length;
-        const tradeIns = acquisitions.filter(a => a.notes && (a.notes.includes('Mode: cash') || a.notes.includes('Mode: discount')));
-        const regularAcq = acquisitions.filter(a => !a.notes || (!a.notes.includes('Mode: cash') && !a.notes.includes('Mode: discount')));
+        const tradeIns = acquisitions.filter(a => a.notes && a.notes.includes('Value:'));
+        const regularAcq = acquisitions.filter(a => !a.notes || !a.notes.includes('Value:'));
         document.getElementById('dashAcquisitions').textContent = regularAcq.length;
         document.getElementById('dashTradeIns').textContent = tradeIns.length;
 
-        // inventory breakdown
-        document.getElementById('dashBreakAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
-        document.getElementById('dashBreakPending').textContent = inventory.filter(v => v.status === 'Pending').length;
-        document.getElementById('dashBreakOnWay').textContent = inventory.filter(v => v.status === 'On The Way').length;
-        document.getElementById('dashBreakSold').textContent = inventory.filter(v => v.status === 'Sold').length;
+        document.getElementById('dashBreakAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
+        document.getElementById('dashBreakPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
+        document.getElementById('dashBreakOnWay').textContent = inventoryData.filter(v => v.status === 'On The Way').length;
+        document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
-        // recent sales table (last 5)
         const recentSales = sales.slice(0, 5);
         document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
             <tr>
@@ -784,17 +927,28 @@ async function loadDashboard() {
             </tr>
         `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
 
-        // recent acquisitions table (last 5)
         const recentAcq = acquisitions.slice(0, 5);
         document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
-            const isTradeIn = a.notes && (a.notes.includes('Mode: cash') || a.notes.includes('Mode: discount'));
-            return `
-            <tr>
+            const isTradeIn = a.notes && a.notes.includes('Value:');
+            return `<tr>
                 <td class="vin" style="font-size:11px;">${a.vin ?? '—'}</td>
                 <td><span class="status ${isTradeIn ? 'type-tradein' : 'type-acquisition'}">${isTradeIn ? 'Trade-In' : 'Acquisition'}</span></td>
                 <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
-            </tr>
-        `}).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+            </tr>`;
+        }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+
+        // Activity log
+        const logEl = document.getElementById('dashActivityLog');
+        if (logEl) {
+            const recent = logEntries.slice(0, 10);
+            logEl.innerHTML = recent.length ? recent.map(e => `
+                <tr>
+                    <td style="font-size:12px; color:var(--muted);">${e.timestamp ? new Date(e.timestamp).toLocaleString() : '—'}</td>
+                    <td style="font-size:12px;">${e.users?.username ?? 'System'}</td>
+                    <td style="font-size:12px;">${e.message}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No activity yet</div></div></td></tr>`;
+        }
 
     } catch (err) {
         console.error('Failed to load dashboard:', err.message);
