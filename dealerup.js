@@ -1251,7 +1251,6 @@ async function loadDashboard() {
 
         document.getElementById('dashBreakAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashBreakPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
-        document.getElementById('dashBreakOnWay').textContent = inventoryData.filter(v => v.status === 'On The Way').length;
         document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
         const recentSales = filterSales.slice(0, 5);
