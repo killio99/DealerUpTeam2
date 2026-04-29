@@ -155,6 +155,7 @@ let sortCol = null;
 let sortDir = 'asc';
 let acquisitionsCache = [];
 let acquisitionScope = 'mine';
+let acquisitionRequestFormVisible = false;
 
 function sortInventory(col) {
     if (sortCol === col) {
@@ -459,6 +460,20 @@ function renderAcquisitionScopeButtons() {
     if (allBtn) allBtn.classList.toggle('active', acquisitionScope === 'all');
 }
 
+function syncAcquisitionRequestFormVisibility() {
+    const formWrap = document.getElementById('acqRequestFormWrap');
+    const toggleBtn = document.getElementById('acqRequestToggleBtn');
+    if (formWrap) formWrap.style.display = acquisitionRequestFormVisible ? 'block' : 'none';
+    if (toggleBtn) {
+        toggleBtn.style.display = acquisitionRequestFormVisible ? 'none' : 'inline-flex';
+    }
+}
+
+function toggleAcquisitionRequestForm() {
+    acquisitionRequestFormVisible = !acquisitionRequestFormVisible;
+    syncAcquisitionRequestFormVisibility();
+}
+
 async function loadAcquisitions() {
     const roleLabel = document.getElementById('acqRoleLabel');
     const isAdmin = isAdminRole(currentUser?.role);
@@ -470,6 +485,7 @@ async function loadAcquisitions() {
 
     document.getElementById('acqAdminView').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('acqEmployeeView').style.display = isAdmin ? 'none' : 'block';
+    if (!isAdmin) syncAcquisitionRequestFormVisibility();
 
     try {
         acquisitionsCache = await db.acquisitions.getAll();
@@ -584,6 +600,8 @@ function clearAcquisitionRequestForm(hideResult = true) {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
+    acquisitionRequestFormVisible = false;
+    syncAcquisitionRequestFormVisibility();
     if (hideResult) document.getElementById('acqEmployeeResult').style.display = 'none';
 }
 
