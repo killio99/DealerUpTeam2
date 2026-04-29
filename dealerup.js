@@ -203,7 +203,7 @@ async function loadInventory() {
 function renderStats() {
     document.getElementById('statTotal').textContent = inventory.length;
     document.getElementById('statAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
-    document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
+    document.getElementById('statSold').textContent = '—';
 }
 
 
@@ -212,6 +212,7 @@ function renderTable() {
   const statusF = document.getElementById('statusFilter')?.value || '';
 
     const filtered = inventory.filter(v => {
+    if (v.status === 'Sold') return false;
     const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) ||
         (v.model ?? '').toLowerCase().includes(q) ||
         (v.vin ?? '').toLowerCase().includes(q) ||
@@ -381,11 +382,6 @@ async function saveVehicle() {
 }
 
 async function deleteVehicle(vin) {
-    const vehicle = inventory.find(v => v.vin === vin);
-    if (vehicle?.status === 'Sold') {
-        alert('Cannot delete a sold vehicle. It is linked to a sales record.');
-        return;
-    }
     if (!confirm('Remove this vehicle from inventory?')) return;
     try {
         await db.inventory.delete(vin);
@@ -1194,10 +1190,10 @@ async function submitSale() {
         return;
     }
 
-    const previousStatus = vehicle.status;
     let inventoryUpdated = false;
 
     try {
+        const previousStatus = vehicle.status;
         const updatePayload = { status: 'Sold' };
         if (!Number.isNaN(mileage)) {
             updatePayload.mileage = mileage;
@@ -1238,7 +1234,7 @@ async function submitSale() {
             try {
                 await db.inventory.update(vin, { status: previousStatus });
             } catch (rollbackErr) {
-                console.error('Failed to revert inventory status after sale submission error:', rollbackErr.message);
+                console.error('Failed to revert inventory status:', rollbackErr.message);
             }
         }
         console.error('Sale submission failed:', err.message);
@@ -1373,7 +1369,7 @@ async function loadDashboard() {
 
         document.getElementById('dashBreakAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashBreakPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
-        document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
+        document.getElementById('dashBreakSold').textContent = '0';
 
         const recentSales = filterSales.slice(0, 5);
         document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
@@ -1475,17 +1471,12 @@ function renderStatusChart(inventoryData) {
 
     const available = inventoryData.filter(v => v.status === 'Available').length;
     const pending = inventoryData.filter(v => v.status === 'Pending').length;
-    const sold = inventoryData.filter(v => v.status === 'Sold').length;
 
     _statusChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Available', 'Pending', 'Sold'],
-            datasets: [{
-                data: [available, pending, sold],
-                backgroundColor: ['#3b6d11', '#854f0b', '#78766e'],
-                borderWidth: 0,
-            }]
+            labels: ['Available', 'Pending'],
+            datasets: [{ data: [available, pending], backgroundColor: ['#3b6d11', '#854f0b'], borderWidth: 0 }]
         },
         options: {
             responsive: true,
