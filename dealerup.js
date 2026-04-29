@@ -59,7 +59,7 @@ function restoreSessionIfExists() {
             document.getElementById('addVehicleBtn').style.display = 'flex';
         }
         loadInventory();
-        switchTab('dashboard');
+        switchTab(localStorage.getItem('activeTab') || 'dashboard');
     }
 }
 
@@ -115,7 +115,7 @@ async function doLogin() {
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             }
             await loadInventory();
-            switchTab('dashboard');
+            switchTab(localStorage.getItem('activeTab') || 'dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
@@ -410,6 +410,7 @@ document.getElementById('acqModal').addEventListener('click', function (e) {
 
 // ── Tab Navigation ──────────────────────────────────
 async function switchTab(tab) {
+  localStorage.setItem('activeTab', tab);
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
     inventory: document.getElementById('inventoryPage'),
