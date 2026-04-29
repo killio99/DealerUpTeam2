@@ -201,9 +201,10 @@ async function loadInventory() {
 }
 
 function renderStats() {
-    document.getElementById('statTotal').textContent = inventory.length;
-    document.getElementById('statAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
-    document.getElementById('statSold').textContent = '—';
+    const active = inventory.filter(v => v.status !== 'Sold');
+    document.getElementById('statTotal').textContent = active.length;
+    document.getElementById('statAvailable').textContent = active.filter(v => v.status === 'Available').length;
+    document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
 }
 
 
@@ -1354,13 +1355,13 @@ async function loadDashboard() {
             ? acquisitions.filter(a => a.created_at && new Date(a.created_at) >= filterStart)
             : acquisitions;
 
-        document.getElementById('dashTotal').textContent = inventoryData.length;
+        document.getElementById('dashTotal').textContent = inventoryData.filter(v => v.status !== 'Sold').length;
         document.getElementById('dashAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashSales').textContent = filterSales.length;
         const revenue = filterSales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
 
-        document.getElementById('dashPending').textContent = filterSales.filter(s => s.status === 'Pending').length;
+        document.getElementById('dashPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
         const tradeIns = filterAcq.filter(a => a.notes && a.notes.includes('Value:'));
         const regularAcq = filterAcq.filter(a => !a.notes || !a.notes.includes('Value:'));
         document.getElementById('dashAcquisitions').textContent = regularAcq.length;
@@ -1368,7 +1369,7 @@ async function loadDashboard() {
 
         document.getElementById('dashBreakAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashBreakPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
-        document.getElementById('dashBreakSold').textContent = '0';
+        document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
         const recentSales = filterSales.slice(0, 5);
         document.getElementById('dashRecentSales').innerHTML = recentSales.length ? recentSales.map(s => `
