@@ -379,8 +379,15 @@
     </div>
 
     <div id="acqEmployeeView" style="display:none;">
-      <div class="table-wrap" style="padding:24px; margin-bottom:20px;">
-        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Create Acquisition Request</div>
+      <div style="display:flex; justify-content:flex-start; margin-bottom:12px;">
+        <button class="btn-add" id="acqRequestToggleBtn" onclick="toggleAcquisitionRequestForm()" style="padding:6px 10px; font-size:12px;">Create Acquisition Request +</button>
+      </div>
+
+      <div class="table-wrap" id="acqRequestFormWrap" style="display:none; padding:24px; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px;">
+          <div style="font-size:13px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Create Acquisition Request</div>
+          <button class="btn-cancel" onclick="toggleAcquisitionRequestForm()">Close</button>
+        </div>
         <div class="form-grid">
           <div class="full">
             <label>VIN</label>

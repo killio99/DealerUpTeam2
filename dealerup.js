@@ -59,7 +59,7 @@ function restoreSessionIfExists() {
             document.getElementById('addVehicleBtn').style.display = 'flex';
         }
         loadInventory();
-        switchTab('dashboard');
+        switchTab(localStorage.getItem('activeTab') || 'dashboard');
     }
 }
 
@@ -115,7 +115,7 @@ async function doLogin() {
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             }
             await loadInventory();
-            switchTab('dashboard');
+            switchTab(localStorage.getItem('activeTab') || 'dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
@@ -155,6 +155,7 @@ let sortCol = null;
 let sortDir = 'asc';
 let acquisitionsCache = [];
 let acquisitionScope = 'mine';
+let acquisitionRequestFormVisible = false;
 
 function sortInventory(col) {
     if (sortCol === col) {
@@ -361,6 +362,22 @@ async function saveVehicle() {
             }
             try {
                 await db.acquisitions.approve(approvingAcquisition.acquisition_id);
+                
+                // If this is a trade-in, create customer record with amount owed
+                if (approvingAcquisition.notes && approvingAcquisition.notes.includes('Customer:')) {
+                    const notes = approvingAcquisition.notes;
+                    const customerMatch = notes.match(/Customer:\s*([^|]+)/);
+                    const valueMatch = notes.match(/Value:\s*\$([\d,.]+)/);
+                    if (customerMatch && valueMatch) {
+                        const customerName = customerMatch[1].trim();
+                        const value = parseFloat(valueMatch[1].replace(/,/g, ''));
+                        await db.customers.insert({
+                            customer_name: customerName,
+                            phone: null,
+                            amount_owed: -value,
+                        });
+                    }
+                }
             } catch (approveErr) {
                 try {
                     await db.inventory.delete(vin);
@@ -407,6 +424,7 @@ document.getElementById('acqModal').addEventListener('click', function (e) {
 
 // ── Tab Navigation ──────────────────────────────────
 async function switchTab(tab) {
+  localStorage.setItem('activeTab', tab);
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
     inventory: document.getElementById('inventoryPage'),
@@ -456,6 +474,20 @@ function renderAcquisitionScopeButtons() {
     if (allBtn) allBtn.classList.toggle('active', acquisitionScope === 'all');
 }
 
+function syncAcquisitionRequestFormVisibility() {
+    const formWrap = document.getElementById('acqRequestFormWrap');
+    const toggleBtn = document.getElementById('acqRequestToggleBtn');
+    if (formWrap) formWrap.style.display = acquisitionRequestFormVisible ? 'block' : 'none';
+    if (toggleBtn) {
+        toggleBtn.style.display = acquisitionRequestFormVisible ? 'none' : 'inline-flex';
+    }
+}
+
+function toggleAcquisitionRequestForm() {
+    acquisitionRequestFormVisible = !acquisitionRequestFormVisible;
+    syncAcquisitionRequestFormVisibility();
+}
+
 async function loadAcquisitions() {
     const roleLabel = document.getElementById('acqRoleLabel');
     const isAdmin = isAdminRole(currentUser?.role);
@@ -467,6 +499,7 @@ async function loadAcquisitions() {
 
     document.getElementById('acqAdminView').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('acqEmployeeView').style.display = isAdmin ? 'none' : 'block';
+    if (!isAdmin) syncAcquisitionRequestFormVisibility();
 
     try {
         acquisitionsCache = await db.acquisitions.getAll();
@@ -581,6 +614,8 @@ function clearAcquisitionRequestForm(hideResult = true) {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
+    acquisitionRequestFormVisible = false;
+    syncAcquisitionRequestFormVisibility();
     if (hideResult) document.getElementById('acqEmployeeResult').style.display = 'none';
 }
 
