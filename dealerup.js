@@ -798,6 +798,22 @@ function clearTradeInForm() {
     document.getElementById('tiResult').style.display = 'none';
 }
 
+function hideSaleStatusMessage() {
+    const status = document.getElementById('saleStatusMessage');
+    if (status) status.style.display = 'none';
+}
+
+function showSaleStatusMessage(type, message) {
+    const status = document.getElementById('saleStatusMessage');
+    const text = document.getElementById('saleStatusText');
+    if (!status || !text) return;
+    status.style.display = 'block';
+    text.textContent = message;
+    text.style.color = type === 'success' ? 'var(--success-text)' : 'var(--danger-text)';
+    text.style.background = type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)';
+    text.style.border = type === 'success' ? '1px solid #b7d98b' : '1px solid #f7c1c1';
+}
+
 function clearSaleForm() {
     ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleMileage', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
@@ -807,6 +823,9 @@ function clearSaleForm() {
     if (picker) picker.value = '';
     const info = document.getElementById('saleSelectedVehicleInfo');
     if (info) info.style.display = 'none';
+    const result = document.getElementById('saleResult');
+    if (result) result.style.display = 'none';
+    hideSaleStatusMessage();
 }
 
 function getSaleFormData() {
@@ -836,6 +855,7 @@ function openSaleForm() {
         if (save) saveSaleDraft();
     }
     clearSaleForm();
+    hideSaleStatusMessage();
     populateSaleVehiclePicker();
     const section = document.getElementById('saleFormSection');
     section.style.display = 'block';
@@ -935,6 +955,11 @@ function saveSaleDraft() {
     const vehicle = inventory.find(v => v.vin === vin);
     const vehicleLabel = vehicle ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() : '';
 
+    if (vehicle && vehicle.status === 'Sold') {
+        showSaleResult('error', 'Cannot save a draft for a vehicle that is already sold.');
+        return;
+    }
+
     const drafts = getSaleDrafts();
     const existingIndex = drafts.findIndex(d => d.id === draftId);
     const draft = {
@@ -962,7 +987,9 @@ function saveSaleDraft() {
     saleFormLoadedDraftSnapshot = getSaleFormData();
     document.getElementById('saleDraftId').value = draftId;
     renderDraftsList();
-    showSaleResult('success', 'Draft saved successfully!');
+    clearSaleForm();
+    closeSaleForm();
+    showSaleStatusMessage('success', 'Draft saved successfully!');
 }
 
 function openDraftsModal() {
@@ -1123,7 +1150,9 @@ async function submitSale() {
         await loadInventory();
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
-        showSaleResult('success', `Sale submitted successfully!`);
+        clearSaleForm();
+        closeSaleForm();
+        showSaleStatusMessage('success', 'Sale submitted successfully!');
         // remove draft if it existed
         if (draftId) {
             const drafts = getSaleDrafts().filter(d => d.id !== draftId);
@@ -1131,8 +1160,6 @@ async function submitSale() {
             renderDraftsList();
             document.getElementById('saleDraftId').value = '';
         }
-        clearSaleForm();
-        closeSaleForm();
         loadMySales();
     } catch (err) {
         if (inventoryUpdated) {
