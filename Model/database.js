@@ -317,9 +317,8 @@ window.db = {
 
         async getAll() {
             const { data, error } = await _client
-                .from('acquisition_forms')
-                .select('*, vehicle_inventory(*)')
-                .order('acquisition_id', { ascending: false });
+                .from('users')
+                .select('user_id, username, role');
             if (error) throw error;
             return data;
         },

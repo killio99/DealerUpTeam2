@@ -45,6 +45,7 @@ async function doLogin() {
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             }
             await loadInventory();
+            switchTab('dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
@@ -181,7 +182,7 @@ if (sortCol) {
       <td>${v.license_plate ?? '—'}</td>
       <td>${v.mileage?.toLocaleString() ?? '—'}</td>
       <td>$${(v.listed_sale ?? 0).toLocaleString()}</td>
-      <td>${v.status}</td>
+      <td><span class="status s-${v.status?.toLowerCase()}">${v.status ?? '—'}</span></td>
       <td>${isAdmin ? `
         <div class="action-btns">
           <button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button>
@@ -708,14 +709,7 @@ async function loadTransactions() {
                 <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
                 <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
                 <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
-                <td>
-                <select onchange="advanceTransaction(${r.id}, '${r.status}', this.value)">
-                   <option value="${r.status}" selected>${r.status}</option>
-                   ${(TRANSACTION_FLOW[r.status] || []).map(state => `
-                    <option value="${state}">${state}</option>
-                    `).join('')}
-                </select>
-                </td>
+                <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
             </tr>
         `).join('');
 
@@ -793,26 +787,6 @@ async function loadMySales() {
         console.error('Failed to load my sales:', err.message);
         tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">Failed to load sales</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
     }
-}
-
-// ── Trade-In ──────────────────────────────────────────
-let tradeInMode = 'cash';
-
-function setTradeInMode(mode) {
-    tradeInMode = mode;
-
-    document.getElementById('modeCashBtn').classList.toggle('active', mode === 'cash');
-    document.getElementById('modeDiscountBtn').classList.toggle('active', mode === 'discount');
-
-    document.getElementById('cashFields').style.display = mode === 'cash' ? 'block' : 'none';
-    document.getElementById('discountFields').style.display = mode === 'discount' ? 'block' : 'none';
-
-    const descText = mode === 'cash'
-        ? 'Cash / Credit mode: the trade-in value will be paid out or credited directly to the customer.'
-        : 'Discount mode: the trade-in value will be applied as a discount toward a new vehicle purchase.';
-    document.getElementById('modeDescriptionText').textContent = descText;
-
-    document.getElementById('tiResult').style.display = 'none';
 }
 
 function clearTradeInForm() {
@@ -1377,15 +1351,14 @@ function renderStatusChart(inventoryData) {
     const available = inventoryData.filter(v => v.status === 'Available').length;
     const pending = inventoryData.filter(v => v.status === 'Pending').length;
     const sold = inventoryData.filter(v => v.status === 'Sold').length;
-    const onWay = inventoryData.filter(v => v.status === 'On The Way').length;
 
     _statusChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Available', 'Pending', 'Sold', 'On The Way'],
+            labels: ['Available', 'Pending', 'Sold'],
             datasets: [{
-                data: [available, pending, sold, onWay],
-                backgroundColor: ['#3b6d11', '#854f0b', '#78766e', '#1a3fa6'],
+                data: [available, pending, sold],
+                backgroundColor: ['#3b6d11', '#854f0b', '#78766e'],
                 borderWidth: 0,
             }]
         },
