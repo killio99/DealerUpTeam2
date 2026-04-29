@@ -321,6 +321,22 @@ async function saveVehicle() {
             }
             try {
                 await db.acquisitions.approve(approvingAcquisition.acquisition_id);
+                
+                // If this is a trade-in, create customer record with amount owed
+                if (approvingAcquisition.notes && approvingAcquisition.notes.includes('Customer:')) {
+                    const notes = approvingAcquisition.notes;
+                    const customerMatch = notes.match(/Customer:\s*([^|]+)/);
+                    const valueMatch = notes.match(/Value:\s*\$([\d,.]+)/);
+                    if (customerMatch && valueMatch) {
+                        const customerName = customerMatch[1].trim();
+                        const value = parseFloat(valueMatch[1].replace(/,/g, ''));
+                        await db.customers.insert({
+                            customer_name: customerName,
+                            phone: null,
+                            amount_owed: -value,
+                        });
+                    }
+                }
             } catch (approveErr) {
                 try {
                     await db.inventory.delete(vin);
