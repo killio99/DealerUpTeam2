@@ -1,3 +1,35 @@
+// ── Dark Mode ─────────────────────────────────────────
+function initDarkMode() {
+    // Check if user has saved preference, otherwise check system preference
+    const savedMode = localStorage.getItem('darkMode');
+    const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedMode === 'true' || (savedMode === null && systemDark)) {
+        enableDarkMode();
+    }
+}
+
+function toggleDarkMode() {
+    if (document.body.classList.contains('dark-mode')) {
+        disableDarkMode();
+    } else {
+        enableDarkMode();
+    }
+}
+
+function enableDarkMode() {
+    document.body.classList.add('dark-mode');
+    localStorage.setItem('darkMode', 'true');
+}
+
+function disableDarkMode() {
+    document.body.classList.remove('dark-mode');
+    localStorage.setItem('darkMode', 'false');
+}
+
+// Initialize dark mode on page load
+window.addEventListener('DOMContentLoaded', initDarkMode);
+
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
