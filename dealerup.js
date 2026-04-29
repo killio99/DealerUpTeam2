@@ -30,6 +30,42 @@ function disableDarkMode() {
 // Initialize dark mode on page load
 window.addEventListener('DOMContentLoaded', initDarkMode);
 
+// ── Session Persistence ────────────────────────────────
+function saveSession(user) {
+    sessionStorage.setItem('currentUser', JSON.stringify(user));
+}
+
+function loadSession() {
+    const saved = sessionStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+}
+
+function clearSession() {
+    sessionStorage.removeItem('currentUser');
+}
+
+function restoreSessionIfExists() {
+    const user = loadSession();
+    if (user) {
+        currentUser = user;
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+        const badge = document.getElementById('headerRoleBadge');
+        badge.textContent = currentUser.role;
+        badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
+        document.getElementById('headerUserName').textContent = currentUser.username;
+        if (isAdminRole(currentUser.role)) {
+            document.getElementById('actionsHeader').textContent = 'Actions';
+            document.getElementById('addVehicleBtn').style.display = 'flex';
+        }
+        loadInventory();
+        switchTab('dashboard');
+    }
+}
+
+// Restore session on page load
+window.addEventListener('DOMContentLoaded', restoreSessionIfExists);
+
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
@@ -67,6 +103,7 @@ async function doLogin() {
         const user = await db.users.login(u, p);
         if (user) {
             currentUser = user; // { user_id, username, role }
+            saveSession(user); // Save to sessionStorage
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
             const badge = document.getElementById('headerRoleBadge');
@@ -90,6 +127,7 @@ async function doLogin() {
 
 function doLogout() {
     currentUser = null;
+    clearSession(); // Clear from sessionStorage
     document.getElementById('app').classList.remove('visible');
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('loginUser').value = '';
