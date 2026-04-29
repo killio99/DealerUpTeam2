@@ -68,6 +68,7 @@ The master list of all vehicles at the dealership.
 | `listed_sale` | DECIMAL(10,2) | | Asking price shown to customers |
 | `mileage` | INT | | |
 | `color` | VARCHAR(50) | | |
+| `license_plate` | VARCHAR(20) | | Vehicle license plate number |
 | `comments` | TEXT | | Internal notes |
 | `status` | ENUM('Available','On The Way','Sold','Pending') | DEFAULT 'Available' | |
 

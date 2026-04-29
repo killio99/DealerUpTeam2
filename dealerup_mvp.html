@@ -101,6 +101,7 @@
           <tr>
             <th class="sortable" onclick="sortInventory('vehicle')">Vehicle <span class="sort-arrow" id="sort-vehicle"></span></th>
             <th class="sortable" onclick="sortInventory('vin')">VIN <span class="sort-arrow" id="sort-vin"></span></th>
+            <th class="sortable" onclick="sortInventory('liscplate')">Lic. Plate <span class="sort-arrow" id="sort-liscplate"></span></th>
             <th class="sortable" onclick="sortInventory('mileage')">Mileage <span class="sort-arrow" id="sort-mileage"></span></th>
             <th class="sortable" onclick="sortInventory('price')">Price <span class="sort-arrow" id="sort-price"></span></th>
             <th class="sortable" onclick="sortInventory('status')">Status <span class="sort-arrow" id="sort-status"></span></th>
@@ -109,7 +110,7 @@
         </thead>
         <tbody id="inventoryBody">
           <tr>
-            <td colspan="6">
+            <td colspan="7">
               <div class="empty-state">
                 <div class="empty-icon">&#9723;</div>
                 <div class="empty-title">Loading inventory...</div>
@@ -595,7 +596,11 @@
           <div class="full">
             <label>Mileage</label>
             <input type="number" id="tiMileage" placeholder="45000" min="0" />
-        </div>
+          </div>
+          <div class="full">
+            <label>License Plate</label>
+            <input type="text" id="tiLicensePlate" placeholder="ABC-1234" style="text-transform:uppercase;" />
+          </div>
         </div>
       </div>
 
@@ -633,6 +638,10 @@
           <input type="text" id="fModel" placeholder="F-150" />
         </div>
         <input type="hidden" id="fVin" />
+        <div class="full">
+          <label>License Plate</label>
+          <input type="text" id="fLicensePlate" placeholder="ABC-1234" style="text-transform:uppercase;" />
+        </div>
         <div>
           <label>Mileage</label>
           <input type="number" id="fMileage" placeholder="0" min="0" />

@@ -98,6 +98,7 @@ function getSortValue(v, col) {
     switch (col) {
         case 'vehicle': return `${v.year ?? 0} ${v.make ?? ''} ${v.model ?? ''}`.toLowerCase();
         case 'vin':     return (v.vin ?? '').toLowerCase();
+        case 'liscplate':     return (v.license_plate ?? '').toLowerCase();
         case 'mileage': return v.mileage ?? -1;
         case 'price':   return v.listed_sale ?? -1;
         case 'status':  return (v.status ?? '').toLowerCase();
@@ -106,7 +107,7 @@ function getSortValue(v, col) {
 }
 
 function updateSortArrows() {
-    ['vehicle', 'vin', 'mileage', 'price', 'status'].forEach(col => {
+    ['vehicle', 'vin', 'mileage', 'price','liscplate', 'status'].forEach(col => {
         const el = document.getElementById('sort-' + col);
         if (!el) return;
         if (sortCol === col) {
@@ -141,7 +142,8 @@ function renderTable() {
     const filtered = inventory.filter(v => {
     const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) ||
         (v.model ?? '').toLowerCase().includes(q) ||
-        (v.vin ?? '').toLowerCase().includes(q);
+        (v.vin ?? '').toLowerCase().includes(q) ||
+        (v.license_plate ?? '').toLowerCase().includes(q);
 
     const matchStatus = !statusF || v.status === statusF;
     return matchSearch && matchStatus;
@@ -162,7 +164,7 @@ if (sortCol) {
   tbody.innerHTML = '';
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="6">No vehicles found</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7">No vehicles found</td></tr>`;
     return;
   }
 
@@ -172,6 +174,7 @@ if (sortCol) {
     row.innerHTML = `
       <td>${v.year} ${v.make} ${v.model}</td>
       <td>${v.vin}</td>
+      <td>${v.license_plate ?? '—'}</td>
       <td>${v.mileage?.toLocaleString() ?? '—'}</td>
       <td>$${(v.listed_sale ?? 0).toLocaleString()}</td>
       <td>${v.status}</td>
@@ -187,7 +190,7 @@ function openAddModal() {
     editingVin = null;
     approvingAcquisition = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
-    ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
+    ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice', 'fLicensePlate'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
     // Auto-generate VIN silently
     const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
@@ -206,13 +209,17 @@ async function openAcquisitionApprovalModal(acquisitionId) {
         document.getElementById('modalTitle').textContent = 'Approve acquisition';
         document.getElementById('modalSaveBtn').textContent = 'Approve & Add to Inventory';
 
-        document.getElementById('fYear').value = '';
-        document.getElementById('fMake').value = '';
-        document.getElementById('fModel').value = '';
+        const existingVehicle = await db.inventory.getMaybeByVin(acq.vin);
+        const isPending = existingVehicle?.model === 'Pending Acquisition';
+
+        document.getElementById('fYear').value = existingVehicle?.year ?? '';
+        document.getElementById('fMake').value = existingVehicle?.make ?? '';
+        document.getElementById('fModel').value = (!isPending && existingVehicle?.model) ? existingVehicle.model : '';
         document.getElementById('fVin').value = acq.vin ?? '';
-        document.getElementById('fMileage').value = '';
-        document.getElementById('fPrice').value = acq.purchase_price ?? '';
+        document.getElementById('fMileage').value = existingVehicle?.mileage ?? '';
+        document.getElementById('fPrice').value = acq.purchase_price ?? existingVehicle?.listed_sale ?? '';
         document.getElementById('fStatus').value = 'Available';
+        document.getElementById('fLicensePlate').value = existingVehicle?.license_plate ?? '';
 
         setAcquisitionModalLoading(false);
         document.getElementById('modal').classList.add('open');
@@ -233,6 +240,7 @@ function openEditModal(vin) {
     document.getElementById('fMileage').value = v.mileage ?? '';
     document.getElementById('fPrice').value = v.listed_sale ?? '';
     document.getElementById('fStatus').value = v.status;
+    document.getElementById('fLicensePlate').value = v.license_plate ?? '';
     document.getElementById('modal').classList.add('open');
 }
 
@@ -250,6 +258,7 @@ async function saveVehicle() {
     const mileage = parseInt(document.getElementById('fMileage').value) || 0;
     const listed_sale = parseFloat(document.getElementById('fPrice').value) || 0;
     const status = document.getElementById('fStatus').value;
+    const license_plate = document.getElementById('fLicensePlate').value.trim().toUpperCase() || null;
 
     if (!year || !model || !vin) {
         alert('Please fill in year, model, and VIN.');
@@ -258,14 +267,14 @@ async function saveVehicle() {
 
     try {
         if (editingVin) {
-            await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+            await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status, license_plate });
         } else if (approvingAcquisition) {
             setAcquisitionModalLoading(true);
             const existingVehicle = await db.inventory.getMaybeByVin(vin);
             if (existingVehicle) {
-                await db.inventory.update(vin, { year, make, model, mileage, listed_sale, status });
+                await db.inventory.update(vin, { year, make, model, mileage, listed_sale, status, license_plate });
             } else {
-                await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+                await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status, license_plate });
             }
             try {
                 await db.acquisitions.approve(approvingAcquisition.acquisition_id);
@@ -279,7 +288,7 @@ async function saveVehicle() {
             }
             setAcquisitionModalLoading(false);
         } else {
-            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status, license_plate });
         }
         closeModal();
         await loadInventory();
@@ -790,7 +799,7 @@ function setTradeInMode(mode) {
 
 function clearTradeInForm() {
     ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel',
-     'tiMileage', 'tiCashValue']
+     'tiMileage', 'tiCashValue', 'tiLicensePlate']
     .forEach(id => { document.getElementById(id).value = ''; });
     generateTradeInVin();
     document.getElementById('tiResult').style.display = 'none';
@@ -1137,6 +1146,7 @@ async function submitTradeIn() {
     const model = document.getElementById('tiModel').value.trim();
     const mileage = parseInt(document.getElementById('tiMileage').value) || 0;
     const value = parseFloat(document.getElementById('tiCashValue').value) || 0;
+    const license_plate = document.getElementById('tiLicensePlate').value.trim().toUpperCase() || null;
     const notes = '';
     const vin = document.getElementById('tiVin').value.trim();
 
@@ -1155,7 +1165,7 @@ async function submitTradeIn() {
         if (!vehicleExists) {
             await db.inventory.insert({
                 vin, year, make: make || null, model, mileage,
-                listed_sale: value, status: 'Pending',
+                listed_sale: value, status: 'Pending', license_plate,
             });
         }
 
