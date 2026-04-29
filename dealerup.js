@@ -160,6 +160,8 @@ if (sortCol) {
     });
 }
 
+  updateSortArrows();
+
   const tbody = document.getElementById('inventoryBody');
   tbody.innerHTML = '';
 
@@ -167,6 +169,8 @@ if (sortCol) {
     tbody.innerHTML = `<tr><td colspan="7">No vehicles found</td></tr>`;
     return;
   }
+
+  const isAdmin = isAdminRole(currentUser?.role);
 
   filtered.forEach(v => {
     const row = document.createElement('tr');
@@ -178,7 +182,12 @@ if (sortCol) {
       <td>${v.mileage?.toLocaleString() ?? '—'}</td>
       <td>$${(v.listed_sale ?? 0).toLocaleString()}</td>
       <td>${v.status}</td>
-      <td></td>
+      <td>${isAdmin ? `
+        <div class="action-btns">
+          <button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button>
+          <button class="btn-sm danger" onclick="deleteVehicle('${v.vin}')">Delete</button>
+        </div>` : ''}
+      </td>
     `;
 
     tbody.appendChild(row);
@@ -300,12 +309,21 @@ async function saveVehicle() {
 }
 
 async function deleteVehicle(vin) {
+    const vehicle = inventory.find(v => v.vin === vin);
+    if (vehicle?.status === 'Sold') {
+        alert('Cannot delete a sold vehicle. It is linked to a sales record.');
+        return;
+    }
     if (!confirm('Remove this vehicle from inventory?')) return;
     try {
         await db.inventory.delete(vin);
         await loadInventory();
     } catch (err) {
-        alert('Delete failed: ' + err.message);
+        if (err.message?.includes('foreign key')) {
+            alert('Cannot delete this vehicle — it is linked to an existing sales or acquisition record.');
+        } else {
+            alert('Delete failed: ' + err.message);
+        }
     }
 }
 
