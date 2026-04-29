@@ -30,6 +30,42 @@ function disableDarkMode() {
 // Initialize dark mode on page load
 window.addEventListener('DOMContentLoaded', initDarkMode);
 
+// ── Session Persistence ────────────────────────────────
+function saveSession(user) {
+    sessionStorage.setItem('currentUser', JSON.stringify(user));
+}
+
+function loadSession() {
+    const saved = sessionStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+}
+
+function clearSession() {
+    sessionStorage.removeItem('currentUser');
+}
+
+function restoreSessionIfExists() {
+    const user = loadSession();
+    if (user) {
+        currentUser = user;
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+        const badge = document.getElementById('headerRoleBadge');
+        badge.textContent = currentUser.role;
+        badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
+        document.getElementById('headerUserName').textContent = currentUser.username;
+        if (isAdminRole(currentUser.role)) {
+            document.getElementById('actionsHeader').textContent = 'Actions';
+            document.getElementById('addVehicleBtn').style.display = 'flex';
+        }
+        loadInventory();
+        switchTab('dashboard');
+    }
+}
+
+// Restore session on page load
+window.addEventListener('DOMContentLoaded', restoreSessionIfExists);
+
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
@@ -67,6 +103,7 @@ async function doLogin() {
         const user = await db.users.login(u, p);
         if (user) {
             currentUser = user; // { user_id, username, role }
+            saveSession(user); // Save to sessionStorage
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
             const badge = document.getElementById('headerRoleBadge');
@@ -90,6 +127,7 @@ async function doLogin() {
 
 function doLogout() {
     currentUser = null;
+    clearSession(); // Clear from sessionStorage
     document.getElementById('app').classList.remove('visible');
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('loginUser').value = '';
@@ -378,6 +416,12 @@ async function switchTab(tab) {
   };
   const tabs = document.querySelectorAll('.tab-btn');
     const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein'];
+
+  // Hide sale form and messages when leaving My Sales tab
+  if (tab !== 'mysales') {
+    closeSaleForm();
+    hideSaleStatusMessage();
+  }
 
   Object.values(pages).forEach(p => p.style.display = 'none');
   tabs.forEach(t => t.classList.remove('active'));
@@ -826,6 +870,22 @@ function clearTradeInForm() {
     document.getElementById('tiResult').style.display = 'none';
 }
 
+function hideSaleStatusMessage() {
+    const status = document.getElementById('saleStatusMessage');
+    if (status) status.style.display = 'none';
+}
+
+function showSaleStatusMessage(type, message) {
+    const status = document.getElementById('saleStatusMessage');
+    const text = document.getElementById('saleStatusText');
+    if (!status || !text) return;
+    status.style.display = 'block';
+    text.textContent = message;
+    text.style.color = type === 'success' ? 'var(--success-text)' : 'var(--danger-text)';
+    text.style.background = type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)';
+    text.style.border = type === 'success' ? '1px solid #b7d98b' : '1px solid #f7c1c1';
+}
+
 function clearSaleForm() {
     ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleMileage', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
@@ -835,6 +895,9 @@ function clearSaleForm() {
     if (picker) picker.value = '';
     const info = document.getElementById('saleSelectedVehicleInfo');
     if (info) info.style.display = 'none';
+    const result = document.getElementById('saleResult');
+    if (result) result.style.display = 'none';
+    hideSaleStatusMessage();
 }
 
 function getSaleFormData() {
@@ -864,6 +927,7 @@ function openSaleForm() {
         if (save) saveSaleDraft();
     }
     clearSaleForm();
+    hideSaleStatusMessage();
     populateSaleVehiclePicker();
     const section = document.getElementById('saleFormSection');
     section.style.display = 'block';
@@ -934,7 +998,8 @@ function showSaleResult(type, message) {
 
 function getSaleDrafts() {
     try {
-        const raw = localStorage.getItem('saleDrafts');
+        const key = `saleDrafts_${currentUser.user_id}`;
+        const raw = localStorage.getItem(key);
         return raw ? JSON.parse(raw) : [];
     } catch (err) {
         return [];
@@ -942,7 +1007,8 @@ function getSaleDrafts() {
 }
 
 function saveSaleDrafts(drafts) {
-    localStorage.setItem('saleDrafts', JSON.stringify(drafts));
+    const key = `saleDrafts_${currentUser.user_id}`;
+    localStorage.setItem(key, JSON.stringify(drafts));
 }
 
 function saveSaleDraft() {
@@ -962,6 +1028,11 @@ function saveSaleDraft() {
 
     const vehicle = inventory.find(v => v.vin === vin);
     const vehicleLabel = vehicle ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() : '';
+
+    if (vehicle && vehicle.status === 'Sold') {
+        showSaleResult('error', 'Cannot save a draft for a vehicle that is already sold.');
+        return;
+    }
 
     const drafts = getSaleDrafts();
     const existingIndex = drafts.findIndex(d => d.id === draftId);
@@ -990,7 +1061,9 @@ function saveSaleDraft() {
     saleFormLoadedDraftSnapshot = getSaleFormData();
     document.getElementById('saleDraftId').value = draftId;
     renderDraftsList();
-    showSaleResult('success', 'Draft saved successfully!');
+    clearSaleForm();
+    closeSaleForm();
+    showSaleStatusMessage('success', 'Draft saved successfully!');
 }
 
 function openDraftsModal() {
@@ -1151,16 +1224,9 @@ async function submitSale() {
         await loadInventory();
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
-        showSaleResult('success', `Sale submitted successfully!`);
-        // remove draft if it existed
-        if (draftId) {
-            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
-            saveSaleDrafts(drafts);
-            renderDraftsList();
-            document.getElementById('saleDraftId').value = '';
-        }
         clearSaleForm();
         closeSaleForm();
+        showSaleStatusMessage('success', 'Sale submitted successfully!');
         loadMySales();
     } catch (err) {
         if (inventoryUpdated) {
