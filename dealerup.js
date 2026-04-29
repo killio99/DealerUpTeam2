@@ -958,7 +958,8 @@ function showSaleResult(type, message) {
 
 function getSaleDrafts() {
     try {
-        const raw = localStorage.getItem('saleDrafts');
+        const key = `saleDrafts_${currentUser.user_id}`;
+        const raw = localStorage.getItem(key);
         return raw ? JSON.parse(raw) : [];
     } catch (err) {
         return [];
@@ -966,7 +967,8 @@ function getSaleDrafts() {
 }
 
 function saveSaleDrafts(drafts) {
-    localStorage.setItem('saleDrafts', JSON.stringify(drafts));
+    const key = `saleDrafts_${currentUser.user_id}`;
+    localStorage.setItem(key, JSON.stringify(drafts));
 }
 
 function saveSaleDraft() {
@@ -1185,13 +1187,6 @@ async function submitSale() {
         clearSaleForm();
         closeSaleForm();
         showSaleStatusMessage('success', 'Sale submitted successfully!');
-        // remove draft if it existed
-        if (draftId) {
-            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
-            saveSaleDrafts(drafts);
-            renderDraftsList();
-            document.getElementById('saleDraftId').value = '';
-        }
         loadMySales();
     } catch (err) {
         if (inventoryUpdated) {
