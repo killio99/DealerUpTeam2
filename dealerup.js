@@ -45,6 +45,7 @@ async function doLogin() {
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             }
             await loadInventory();
+            switchTab('dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
@@ -98,6 +99,7 @@ function getSortValue(v, col) {
     switch (col) {
         case 'vehicle': return `${v.year ?? 0} ${v.make ?? ''} ${v.model ?? ''}`.toLowerCase();
         case 'vin':     return (v.vin ?? '').toLowerCase();
+        case 'liscplate':     return (v.license_plate ?? '').toLowerCase();
         case 'mileage': return v.mileage ?? -1;
         case 'price':   return v.listed_sale ?? -1;
         case 'status':  return (v.status ?? '').toLowerCase();
@@ -106,7 +108,7 @@ function getSortValue(v, col) {
 }
 
 function updateSortArrows() {
-    ['vehicle', 'vin', 'mileage', 'price', 'status'].forEach(col => {
+    ['vehicle', 'vin', 'mileage', 'price','liscplate', 'status'].forEach(col => {
         const el = document.getElementById('sort-' + col);
         if (!el) return;
         if (sortCol === col) {
@@ -141,7 +143,8 @@ function renderTable() {
     const filtered = inventory.filter(v => {
     const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) ||
         (v.model ?? '').toLowerCase().includes(q) ||
-        (v.vin ?? '').toLowerCase().includes(q);
+        (v.vin ?? '').toLowerCase().includes(q) ||
+        (v.license_plate ?? '').toLowerCase().includes(q);
 
     const matchStatus = !statusF || v.status === statusF;
     return matchSearch && matchStatus;
@@ -158,13 +161,17 @@ if (sortCol) {
     });
 }
 
+  updateSortArrows();
+
   const tbody = document.getElementById('inventoryBody');
   tbody.innerHTML = '';
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="6">No vehicles found</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7">No vehicles found</td></tr>`;
     return;
   }
+
+  const isAdmin = isAdminRole(currentUser?.role);
 
   filtered.forEach(v => {
     const row = document.createElement('tr');
@@ -172,10 +179,16 @@ if (sortCol) {
     row.innerHTML = `
       <td>${v.year} ${v.make} ${v.model}</td>
       <td>${v.vin}</td>
+      <td>${v.license_plate ?? '—'}</td>
       <td>${v.mileage?.toLocaleString() ?? '—'}</td>
       <td>$${(v.listed_sale ?? 0).toLocaleString()}</td>
-      <td>${v.status}</td>
-      <td></td>
+      <td><span class="status s-${v.status?.toLowerCase()}">${v.status ?? '—'}</span></td>
+      <td>${isAdmin ? `
+        <div class="action-btns">
+          <button class="btn-sm" onclick="openEditModal('${v.vin}')">Edit</button>
+          <button class="btn-sm danger" onclick="deleteVehicle('${v.vin}')">Delete</button>
+        </div>` : ''}
+      </td>
     `;
 
     tbody.appendChild(row);
@@ -187,7 +200,7 @@ function openAddModal() {
     editingVin = null;
     approvingAcquisition = null;
     document.getElementById('modalTitle').textContent = 'Add vehicle';
-    ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice'].forEach(id => document.getElementById(id).value = '');
+    ['fYear', 'fMake', 'fModel', 'fMileage', 'fPrice', 'fLicensePlate'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fStatus').value = 'Available';
     // Auto-generate VIN silently
     const chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
@@ -206,13 +219,17 @@ async function openAcquisitionApprovalModal(acquisitionId) {
         document.getElementById('modalTitle').textContent = 'Approve acquisition';
         document.getElementById('modalSaveBtn').textContent = 'Approve & Add to Inventory';
 
-        document.getElementById('fYear').value = '';
-        document.getElementById('fMake').value = '';
-        document.getElementById('fModel').value = '';
+        const existingVehicle = await db.inventory.getMaybeByVin(acq.vin);
+        const isPending = existingVehicle?.model === 'Pending Acquisition';
+
+        document.getElementById('fYear').value = existingVehicle?.year ?? '';
+        document.getElementById('fMake').value = existingVehicle?.make ?? '';
+        document.getElementById('fModel').value = (!isPending && existingVehicle?.model) ? existingVehicle.model : '';
         document.getElementById('fVin').value = acq.vin ?? '';
-        document.getElementById('fMileage').value = '';
-        document.getElementById('fPrice').value = acq.purchase_price ?? '';
+        document.getElementById('fMileage').value = existingVehicle?.mileage ?? '';
+        document.getElementById('fPrice').value = acq.purchase_price ?? existingVehicle?.listed_sale ?? '';
         document.getElementById('fStatus').value = 'Available';
+        document.getElementById('fLicensePlate').value = existingVehicle?.license_plate ?? '';
 
         setAcquisitionModalLoading(false);
         document.getElementById('modal').classList.add('open');
@@ -233,6 +250,7 @@ function openEditModal(vin) {
     document.getElementById('fMileage').value = v.mileage ?? '';
     document.getElementById('fPrice').value = v.listed_sale ?? '';
     document.getElementById('fStatus').value = v.status;
+    document.getElementById('fLicensePlate').value = v.license_plate ?? '';
     document.getElementById('modal').classList.add('open');
 }
 
@@ -250,6 +268,7 @@ async function saveVehicle() {
     const mileage = parseInt(document.getElementById('fMileage').value) || 0;
     const listed_sale = parseFloat(document.getElementById('fPrice').value) || 0;
     const status = document.getElementById('fStatus').value;
+    const license_plate = document.getElementById('fLicensePlate').value.trim().toUpperCase() || null;
 
     if (!year || !model || !vin) {
         alert('Please fill in year, model, and VIN.');
@@ -258,14 +277,14 @@ async function saveVehicle() {
 
     try {
         if (editingVin) {
-            await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status });
+            await db.inventory.update(editingVin, { year, make, model, mileage, listed_sale, status, license_plate });
         } else if (approvingAcquisition) {
             setAcquisitionModalLoading(true);
             const existingVehicle = await db.inventory.getMaybeByVin(vin);
             if (existingVehicle) {
-                await db.inventory.update(vin, { year, make, model, mileage, listed_sale, status });
+                await db.inventory.update(vin, { year, make, model, mileage, listed_sale, status, license_plate });
             } else {
-                await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+                await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status, license_plate });
             }
             try {
                 await db.acquisitions.approve(approvingAcquisition.acquisition_id);
@@ -279,7 +298,7 @@ async function saveVehicle() {
             }
             setAcquisitionModalLoading(false);
         } else {
-            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status });
+            await db.inventory.insert({ vin, year, make, model, mileage, listed_sale, status, license_plate });
         }
         closeModal();
         await loadInventory();
@@ -291,12 +310,21 @@ async function saveVehicle() {
 }
 
 async function deleteVehicle(vin) {
+    const vehicle = inventory.find(v => v.vin === vin);
+    if (vehicle?.status === 'Sold') {
+        alert('Cannot delete a sold vehicle. It is linked to a sales record.');
+        return;
+    }
     if (!confirm('Remove this vehicle from inventory?')) return;
     try {
         await db.inventory.delete(vin);
         await loadInventory();
     } catch (err) {
-        alert('Delete failed: ' + err.message);
+        if (err.message?.includes('foreign key')) {
+            alert('Cannot delete this vehicle — it is linked to an existing sales or acquisition record.');
+        } else {
+            alert('Delete failed: ' + err.message);
+        }
     }
 }
 
@@ -681,14 +709,7 @@ async function loadTransactions() {
                 <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
                 <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
                 <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
-                <td>
-                <select onchange="advanceTransaction(${r.id}, '${r.status}', this.value)">
-                   <option value="${r.status}" selected>${r.status}</option>
-                   ${(TRANSACTION_FLOW[r.status] || []).map(state => `
-                    <option value="${state}">${state}</option>
-                    `).join('')}
-                </select>
-                </td>
+                <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
             </tr>
         `).join('');
 
@@ -768,29 +789,9 @@ async function loadMySales() {
     }
 }
 
-// ── Trade-In ──────────────────────────────────────────
-let tradeInMode = 'cash';
-
-function setTradeInMode(mode) {
-    tradeInMode = mode;
-
-    document.getElementById('modeCashBtn').classList.toggle('active', mode === 'cash');
-    document.getElementById('modeDiscountBtn').classList.toggle('active', mode === 'discount');
-
-    document.getElementById('cashFields').style.display = mode === 'cash' ? 'block' : 'none';
-    document.getElementById('discountFields').style.display = mode === 'discount' ? 'block' : 'none';
-
-    const descText = mode === 'cash'
-        ? 'Cash / Credit mode: the trade-in value will be paid out or credited directly to the customer.'
-        : 'Discount mode: the trade-in value will be applied as a discount toward a new vehicle purchase.';
-    document.getElementById('modeDescriptionText').textContent = descText;
-
-    document.getElementById('tiResult').style.display = 'none';
-}
-
 function clearTradeInForm() {
     ['tiCustomerName', 'tiYear', 'tiMake', 'tiModel',
-     'tiMileage', 'tiCashValue', 'tiNotes']
+     'tiMileage', 'tiCashValue', 'tiLicensePlate']
     .forEach(id => { document.getElementById(id).value = ''; });
     generateTradeInVin();
     document.getElementById('tiResult').style.display = 'none';
@@ -1137,7 +1138,8 @@ async function submitTradeIn() {
     const model = document.getElementById('tiModel').value.trim();
     const mileage = parseInt(document.getElementById('tiMileage').value) || 0;
     const value = parseFloat(document.getElementById('tiCashValue').value) || 0;
-    const notes = document.getElementById('tiNotes').value.trim();
+    const license_plate = document.getElementById('tiLicensePlate').value.trim().toUpperCase() || null;
+    const notes = '';
     const vin = document.getElementById('tiVin').value.trim();
 
     if (!customerName || !year || !model || !vin) {
@@ -1159,7 +1161,7 @@ async function submitTradeIn() {
         if (!vehicleExists) {
             await db.inventory.insert({
                 vin, year, make: make || null, model, mileage,
-                listed_sale: value, status: 'Pending',
+                listed_sale: value, status: 'Pending', license_plate,
             });
         }
 
@@ -1257,9 +1259,10 @@ async function loadDashboard() {
             <tr>
                 <td style="font-size:12px;">${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : s.vin}</td>
                 <td>${s.amount_sold != null ? '$' + s.amount_sold.toLocaleString() : '—'}</td>
+                <td style="font-size:12px; color:var(--muted);">${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
                 <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
             </tr>
-        `).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
+        `).join('') : `<tr><td colspan="4"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No sales yet</div></div></td></tr>`;
 
         const recentAcq = filterAcq.slice(0, 5);
         document.getElementById('dashRecentAcquisitions').innerHTML = recentAcq.length ? recentAcq.map(a => {
@@ -1267,9 +1270,10 @@ async function loadDashboard() {
             return `<tr>
                 <td class="vin" style="font-size:11px;">${a.vin ?? '—'}</td>
                 <td><span class="status ${isTradeIn ? 'type-tradein' : 'type-acquisition'}">${isTradeIn ? 'Trade-In' : 'Acquisition'}</span></td>
+                <td style="font-size:12px; color:var(--muted);">${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
                 <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
             </tr>`;
-        }).join('') : `<tr><td colspan="3"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
+        }).join('') : `<tr><td colspan="4"><div class="empty-state" style="padding:24px;"><div class="empty-title" style="font-size:13px;">No acquisitions yet</div></div></td></tr>`;
 
         // Charts
         renderRevenueChart(filterSales);
@@ -1351,15 +1355,14 @@ function renderStatusChart(inventoryData) {
     const available = inventoryData.filter(v => v.status === 'Available').length;
     const pending = inventoryData.filter(v => v.status === 'Pending').length;
     const sold = inventoryData.filter(v => v.status === 'Sold').length;
-    const onWay = inventoryData.filter(v => v.status === 'On The Way').length;
 
     _statusChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Available', 'Pending', 'Sold', 'On The Way'],
+            labels: ['Available', 'Pending', 'Sold'],
             datasets: [{
-                data: [available, pending, sold, onWay],
-                backgroundColor: ['#3b6d11', '#854f0b', '#78766e', '#1a3fa6'],
+                data: [available, pending, sold],
+                backgroundColor: ['#3b6d11', '#854f0b', '#78766e'],
                 borderWidth: 0,
             }]
         },

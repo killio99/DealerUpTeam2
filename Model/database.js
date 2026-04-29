@@ -317,9 +317,8 @@ window.db = {
 
         async getAll() {
             const { data, error } = await _client
-                .from('business_log')
-                .select('log_id, user_id, message, record_id, timestamp, users(username, role)')
-                .order('timestamp', { ascending: false });
+                .from('users')
+                .select('user_id, username, role');
             if (error) throw error;
             return data;
         },

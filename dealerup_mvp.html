@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>DealerUp — MVP</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231a3fa6' d='M5 17H3V11L5.5 6H18.5L21 11V17H19C19 18.1 18.1 19 17 19C15.9 19 15 18.1 15 17H9C9 18.1 8.1 19 7 19C5.9 19 5 18.1 5 17ZM17 15.5C17.8 15.5 18.5 16.2 18.5 17C18.5 17.8 17.8 18.5 17 18.5C16.2 18.5 15.5 17.8 15.5 17C15.5 16.2 16.2 15.5 17 15.5ZM7 15.5C7.8 15.5 8.5 16.2 8.5 17C8.5 17.8 7.8 18.5 7 18.5C6.2 18.5 5.5 17.8 5.5 17C5.5 16.2 6.2 15.5 7 15.5ZM6.2 10H17.8L16.2 7H7.8L6.2 10Z'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -53,8 +54,8 @@
 
   <!-- ── Tab Navigation ── -->
   <nav class="tab-nav">
-    <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab-btn active" onclick="switchTab('inventory')">Inventory</button>
+    <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('inventory')">Inventory</button>
     <button class="tab-btn" onclick="switchTab('acquisitions')">Acquisitions</button>
     <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
     <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
@@ -100,6 +101,7 @@
           <tr>
             <th class="sortable" onclick="sortInventory('vehicle')">Vehicle <span class="sort-arrow" id="sort-vehicle"></span></th>
             <th class="sortable" onclick="sortInventory('vin')">VIN <span class="sort-arrow" id="sort-vin"></span></th>
+            <th class="sortable" onclick="sortInventory('liscplate')">Lic. Plate <span class="sort-arrow" id="sort-liscplate"></span></th>
             <th class="sortable" onclick="sortInventory('mileage')">Mileage <span class="sort-arrow" id="sort-mileage"></span></th>
             <th class="sortable" onclick="sortInventory('price')">Price <span class="sort-arrow" id="sort-price"></span></th>
             <th class="sortable" onclick="sortInventory('status')">Status <span class="sort-arrow" id="sort-status"></span></th>
@@ -108,7 +110,7 @@
         </thead>
         <tbody id="inventoryBody">
           <tr>
-            <td colspan="6">
+            <td colspan="7">
               <div class="empty-state">
                 <div class="empty-icon">&#9723;</div>
                 <div class="empty-title">Loading inventory...</div>
@@ -221,6 +223,7 @@
             <tr>
               <th>Vehicle</th>
               <th>Amount</th>
+              <th>Date</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -238,6 +241,7 @@
             <tr>
               <th>VIN</th>
               <th>Type</th>
+              <th>Date</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -585,17 +589,14 @@
             <label>Model</label>
             <input type="text" id="tiModel" placeholder="Camry" />
           </div>
-          <div class="full">
-            <label>VIN (auto-generated)</label>
-            <input type="text" id="tiVin" style="font-family:var(--mono); background:var(--bg); color:var(--muted);" readonly />
-          </div>
+          <input type="hidden" id="tiVin" />
           <div class="full">
             <label>Mileage</label>
             <input type="number" id="tiMileage" placeholder="45000" min="0" />
           </div>
           <div class="full">
-            <label>Notes</label>
-            <input type="text" id="tiNotes" placeholder="Optional notes..." />
+            <label>License Plate</label>
+            <input type="text" id="tiLicensePlate" placeholder="ABC-1234" style="text-transform:uppercase;" />
           </div>
         </div>
       </div>
@@ -634,6 +635,10 @@
           <input type="text" id="fModel" placeholder="F-150" />
         </div>
         <input type="hidden" id="fVin" />
+        <div class="full">
+          <label>License Plate</label>
+          <input type="text" id="fLicensePlate" placeholder="ABC-1234" style="text-transform:uppercase;" />
+        </div>
         <div>
           <label>Mileage</label>
           <input type="number" id="fMileage" placeholder="0" min="0" />
