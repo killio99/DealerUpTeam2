@@ -3,6 +3,7 @@ let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
 let approvingAcquisition = null;
 let acquisitionResultHideTimer = null;
+let saleResultHideTimer = null;
 let acquisitionLoading = { id: null, action: null };
 
 // Maps DB role values to CSS class names used in styles.css
@@ -876,6 +877,10 @@ function closeSaleForm() {
 
 function showSaleResult(type, message) {
     const el = document.getElementById('saleResult');
+    if (saleResultHideTimer) {
+        clearTimeout(saleResultHideTimer);
+        saleResultHideTimer = null;
+    }
     el.style.display = 'block';
     el.style.padding = '10px 14px';
     el.style.borderRadius = 'var(--radius)';
@@ -890,6 +895,13 @@ function showSaleResult(type, message) {
         el.style.border = '1px solid #f7c1c1';
     }
     el.textContent = message;
+
+    if (type === 'success') {
+        saleResultHideTimer = setTimeout(() => {
+            el.style.display = 'none';
+            saleResultHideTimer = null;
+        }, 2500);
+    }
 }
 
 function getSaleDrafts() {
@@ -1120,6 +1132,7 @@ async function submitSale() {
             document.getElementById('saleDraftId').value = '';
         }
         clearSaleForm();
+        closeSaleForm();
         loadMySales();
     } catch (err) {
         if (inventoryUpdated) {
@@ -1159,6 +1172,10 @@ async function submitTradeIn() {
 
     const fullNotes = `Customer: ${customerName} | Value: $${value.toLocaleString()}${notes ? ' | Notes: ' + notes : ''}`;
 
+    const vinField = document.getElementById('tiVin');
+        if (!vinField.value) {
+        vinField.value = generateVin();
+    }
     try {
         let vehicleExists = false;
         const existingVehicle = await db.inventory.getMaybeByVin(vin);
@@ -1257,7 +1274,6 @@ async function loadDashboard() {
 
         document.getElementById('dashBreakAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashBreakPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
-        document.getElementById('dashBreakOnWay').textContent = inventoryData.filter(v => v.status === 'On The Way').length;
         document.getElementById('dashBreakSold').textContent = inventoryData.filter(v => v.status === 'Sold').length;
 
         const recentSales = filterSales.slice(0, 5);
