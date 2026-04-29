@@ -224,6 +224,16 @@ main {
     height: 18px;
 }
 
+.login-card {
+    position: relative; /* needed for absolute positioning */
+}
+
+.login-dark-toggle {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
 .login-title {
     font-size: 16px;
     font-weight: 500;
