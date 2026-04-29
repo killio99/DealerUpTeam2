@@ -1147,6 +1147,10 @@ async function submitTradeIn() {
 
     const fullNotes = `Customer: ${customerName} | Value: $${value.toLocaleString()}${notes ? ' | Notes: ' + notes : ''}`;
 
+    const vinField = document.getElementById('tiVin');
+        if (!vinField.value) {
+        vinField.value = generateVin();
+    }
     try {
         let vehicleExists = false;
         const existingVehicle = await db.inventory.getMaybeByVin(vin);
