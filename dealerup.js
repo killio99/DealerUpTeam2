@@ -798,7 +798,7 @@ function clearTradeInForm() {
 }
 
 function clearSaleForm() {
-    ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
+    ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleMileage', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
     });
     document.getElementById('saleDraftId').value = '';
@@ -814,6 +814,7 @@ function getSaleFormData() {
         customerPhone: document.getElementById('saleCustomerPhone').value.trim(),
         vin: document.getElementById('saleVin').value.trim().toUpperCase(),
         amount: document.getElementById('salePrice').value.trim(),
+        mileage: document.getElementById('saleMileage').value.trim(),
         saleDate: document.getElementById('saleDate').value,
         notes: document.getElementById('saleNotes').value.trim(),
     };
@@ -865,6 +866,7 @@ function populateSaleVehiclePicker() {
         `;
         document.getElementById('saleSelectedVehicleInfo').style.display = 'block';
         if (v.listed_sale) document.getElementById('salePrice').value = v.listed_sale;
+        if (v.mileage != null) document.getElementById('saleMileage').value = v.mileage;
     };
 }
 
@@ -908,11 +910,12 @@ function saveSaleDraft() {
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
     const amount = document.getElementById('salePrice').value.trim();
+    const mileage = document.getElementById('saleMileage').value.trim();
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value || `draft-${Date.now()}`;
 
-    if (!customerName && !customerPhone && !vin && !amount && !saleDate && !notes) {
+    if (!customerName && !customerPhone && !vin && !amount && !mileage && !saleDate && !notes) {
         showSaleResult('error', 'Enter at least one field before saving a draft.');
         return;
     }
@@ -930,6 +933,7 @@ function saveSaleDraft() {
         vin,
         vehicleLabel,
         amount,
+        mileage,
         saleDate,
         notes,
     };
@@ -1026,6 +1030,7 @@ function editDraft(id) {
     }
 
     document.getElementById('salePrice').value = draft.amount;
+    document.getElementById('saleMileage').value = draft.mileage || '';
     document.getElementById('saleDate').value = draft.saleDate || '';
     document.getElementById('saleNotes').value = draft.notes;
     saleFormLoadedDraftSnapshot = getSaleFormData();
@@ -1043,6 +1048,7 @@ async function submitSale() {
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
     const amount = Number(document.getElementById('salePrice').value);
+    const mileage = parseInt(document.getElementById('saleMileage').value, 10);
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value;
@@ -1074,7 +1080,11 @@ async function submitSale() {
     let inventoryUpdated = false;
 
     try {
-        await db.inventory.update(vin, { status: 'Sold' });
+        const updatePayload = { status: 'Sold' };
+        if (!Number.isNaN(mileage)) {
+            updatePayload.mileage = mileage;
+        }
+        await db.inventory.update(vin, updatePayload);
         inventoryUpdated = true;
 
         const customer = await db.customers.insert({
