@@ -3,6 +3,7 @@ let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
 let approvingAcquisition = null;
 let acquisitionResultHideTimer = null;
+let saleResultHideTimer = null;
 let acquisitionLoading = { id: null, action: null };
 
 // Maps DB role values to CSS class names used in styles.css
@@ -874,6 +875,10 @@ function closeSaleForm() {
 
 function showSaleResult(type, message) {
     const el = document.getElementById('saleResult');
+    if (saleResultHideTimer) {
+        clearTimeout(saleResultHideTimer);
+        saleResultHideTimer = null;
+    }
     el.style.display = 'block';
     el.style.padding = '10px 14px';
     el.style.borderRadius = 'var(--radius)';
@@ -888,6 +893,13 @@ function showSaleResult(type, message) {
         el.style.border = '1px solid #f7c1c1';
     }
     el.textContent = message;
+
+    if (type === 'success') {
+        saleResultHideTimer = setTimeout(() => {
+            el.style.display = 'none';
+            saleResultHideTimer = null;
+        }, 2500);
+    }
 }
 
 function getSaleDrafts() {
@@ -1110,6 +1122,7 @@ async function submitSale() {
             document.getElementById('saleDraftId').value = '';
         }
         clearSaleForm();
+        closeSaleForm();
         loadMySales();
     } catch (err) {
         if (inventoryUpdated) {
