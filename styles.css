@@ -375,11 +375,12 @@ select:focus {
     gap: 10px;
     background: var(--warn-bg);
     color: var(--warn-text);
-    border: 1px solid #f0d090;
+    border: 1px solid currentColor;
     border-radius: var(--radius);
     padding: 10px 14px;
     font-size: 12px;
     margin-bottom: 16px;
+    opacity: 0.7;
 }
 
 .todo-banner code {
@@ -448,8 +449,8 @@ th {
 }
 
 th:hover {
-  background-color: #e6f4ff; /* light blue */
-  color: #0a66c2; /* optional: slightly darker blue text */
+  background-color: var(--accent-light);
+  color: var(--accent);
 }
 
 th.sortable {
@@ -553,7 +554,7 @@ tbody tr:hover td {
 
 .btn-sm.danger {
     color: var(--danger-text);
-    border-color: #f7c1c1;
+    border-color: var(--danger-bg);
 }
 
 .btn-sm.danger:hover {
