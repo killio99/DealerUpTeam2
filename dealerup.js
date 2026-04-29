@@ -383,6 +383,12 @@ async function switchTab(tab) {
   const tabs = document.querySelectorAll('.tab-btn');
     const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein'];
 
+  // Hide sale form and messages when leaving My Sales tab
+  if (tab !== 'mysales') {
+    closeSaleForm();
+    hideSaleStatusMessage();
+  }
+
   Object.values(pages).forEach(p => p.style.display = 'none');
   tabs.forEach(t => t.classList.remove('active'));
 
