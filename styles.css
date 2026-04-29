@@ -25,6 +25,22 @@
     --radius: 8px;
 }
 
+body.dark-mode {
+    --bg: #1a1917;
+    --surface: #2a2824;
+    --border: #3a372d;
+    --text: #e8e6e1;
+    --muted: #9d9b93;
+    --accent: #5b8fff;
+    --accent-light: #1e3a5f;
+    --success-bg: #1d3d0d;
+    --success-text: #7ecf42;
+    --warn-bg: #3d3514;
+    --warn-text: #ffc85f;
+    --danger-bg: #3d1a1a;
+    --danger-text: #ff6b6b;
+}
+
 body {
     font-family: var(--font);
     background: var(--bg);
@@ -117,6 +133,50 @@ header {
 
 .btn-logout:hover {
     background: var(--bg);
+}
+
+/* ── Dark Mode Toggle ── */
+.btn-dark-mode {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all 0.2s ease;
+}
+
+.btn-dark-mode:hover {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.btn-dark-mode svg {
+    width: 16px;
+    height: 16px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.btn-dark-mode .icon-sun {
+    display: block;
+}
+
+.btn-dark-mode .icon-moon {
+    display: none;
+}
+
+body.dark-mode .btn-dark-mode .icon-sun {
+    display: none;
+}
+
+body.dark-mode .btn-dark-mode .icon-moon {
+    display: block;
 }
 
 main {
