@@ -58,6 +58,7 @@ function restoreSessionIfExists() {
             document.getElementById('actionsHeader').textContent = 'Actions';
             document.getElementById('addVehicleBtn').style.display = 'flex';
             document.getElementById('usersTabBtn').style.display = 'inline-block';
+            document.getElementById('customersTabBtn').style.display = 'inline-block';
         }
         loadInventory();
         switchTab(localStorage.getItem('activeTab') || 'dashboard');
@@ -119,12 +120,15 @@ async function doLogin() {
             document.getElementById('headerUserName').textContent = currentUser.username;
             
             const usersTab = document.getElementById('usersTabBtn');
+            const customersTab = document.getElementById('customersTabBtn');
             if (isAdminRole(currentUser.role)) {
                 usersTab.style.display = 'inline-flex';
+                customersTab.style.display = 'inline-flex';
                 document.getElementById('actionsHeader').textContent = 'Actions';
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             } else {
                 usersTab.style.display = 'none';
+                customersTab.style.display = 'none';
             }
             
             // Now load data and switch tabs
@@ -148,6 +152,7 @@ function doLogout() {
     document.getElementById('loginPass').value = '';
     document.getElementById('loginError').style.display = 'none';
     document.getElementById('actionsHeader').textContent = '';
+    document.getElementById('customersTabBtn').style.display = 'none';
     localStorage.removeItem('activeTab'); 
 }
 
@@ -502,16 +507,17 @@ document.getElementById('acqModal').addEventListener('click', function (e) {
 async function switchTab(tab) {
   localStorage.setItem('activeTab', tab);
   const pages = {
-    dashboard: document.getElementById('dashboardPage'),
-    inventory: document.getElementById('inventoryPage'),
-        acquisitions: document.getElementById('acquisitionsPage'),
-    mysales: document.getElementById('mysalesPage'),
+    dashboard:    document.getElementById('dashboardPage'),
+    inventory:    document.getElementById('inventoryPage'),
+    acquisitions: document.getElementById('acquisitionsPage'),
+    mysales:      document.getElementById('mysalesPage'),
     transactions: document.getElementById('transactionsPage'),
-    tradein: document.getElementById('tradeinPage'),
-    users: document.getElementById('usersPage')
+    tradein:      document.getElementById('tradeinPage'),
+    users:        document.getElementById('usersPage'),
+    customers:    document.getElementById('customersPage'),
   };
   const tabs = document.querySelectorAll('.tab-btn');
-    const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein', 'users'];
+  const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein', 'users', 'customers'];
 
   // Hide sale form and messages when leaving My Sales tab
   if (tab !== 'mysales') {
@@ -519,22 +525,23 @@ async function switchTab(tab) {
     hideSaleStatusMessage();
   }
 
-  Object.values(pages).forEach(p => p.style.display = 'none');
+  Object.values(pages).forEach(p => p && (p.style.display = 'none'));
   tabs.forEach(t => t.classList.remove('active'));
 
-  pages[tab].style.display = 'block';
-  tabs[order.indexOf(tab)].classList.add('active');
+  if (pages[tab]) pages[tab].style.display = 'block';
+  const tabIndex = order.indexOf(tab);
+  if (tabIndex >= 0 && tabs[tabIndex]) tabs[tabIndex].classList.add('active');
 
-  if (tab === 'dashboard') await loadDashboard();
-    if (tab === 'acquisitions') await loadAcquisitions();
-  if (tab === 'tradein') generateTradeInVin();
+  if (tab === 'dashboard')    await loadDashboard();
+  if (tab === 'acquisitions') await loadAcquisitions();
+  if (tab === 'tradein')      generateTradeInVin();
   if (tab === 'transactions') await loadTransactions();
-  if (tab === 'mysales') await loadMySales();
+  if (tab === 'mysales')      await loadMySales();
   if (tab === 'users') {
     console.log("Switching to users tab");
     await loadUsers();
-}
-
+  }
+  if (tab === 'customers')    await loadCustomers();
 }
 
 // ── Filters ──────────────────────────────────────────
@@ -1643,4 +1650,61 @@ async function createUser() {
     console.error(err);
     alert("Failed to create user");
   }
+}
+
+// ── Customers ─────────────────────────────────────────
+let customersCache = [];
+
+async function loadCustomers() {
+    const tbody = document.getElementById('customersBody');
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
+    try {
+        const data = await db.customers.getAll();
+        customersCache = data ?? [];
+        renderCustomersStats();
+        renderCustomersTable();
+    } catch (err) {
+        console.error('Failed to load customers:', err.message);
+        tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+    }
+}
+
+function renderCustomersStats() {
+    const total = customersCache.length;
+    const withOwed = customersCache.filter(c => c.amount_owed && c.amount_owed !== 0).length;
+    const withPhone = customersCache.filter(c => c.phone).length;
+    document.getElementById('statCustomersTotal').textContent = total;
+    document.getElementById('statCustomersOwed').textContent = withOwed;
+    document.getElementById('statCustomersPhone').textContent = withPhone;
+}
+
+function renderCustomersTable() {
+    const q = document.getElementById('customerSearchInput')?.value?.toLowerCase() || '';
+    const filtered = customersCache.filter(c =>
+        !q ||
+        (c.customer_name ?? '').toLowerCase().includes(q) ||
+        (c.phone ?? '').toLowerCase().includes(q)
+    );
+
+    const tbody = document.getElementById('customersBody');
+    if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No customers found</div></div></td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(c => {
+        const owed = c.amount_owed ?? 0;
+        const owedDisplay = owed === 0
+            ? '<span style="color:var(--muted);">—</span>'
+            : `<span style="color:${owed < 0 ? 'var(--success-text)' : 'var(--danger-text)'}; font-weight:500;">${owed < 0 ? '-' : ''}$${Math.abs(owed).toLocaleString()}</span>`;
+        return `
+            <tr>
+                <td style="color:var(--muted); font-size:12px;">${c.customer_id}</td>
+                <td>${c.customer_name ?? '—'}</td>
+                <td style="color:var(--muted);">${c.phone ?? '—'}</td>
+                <td>${owedDisplay}</td>
+                <td class="vin">${c.vin ?? '—'}</td>
+            </tr>
+        `;
+    }).join('');
 }
