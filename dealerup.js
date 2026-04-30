@@ -107,10 +107,9 @@ async function doLogin() {
             saveSession(user); // Save to sessionStorage
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
-            switchTab(localStorage.getItem('activeTab') || 'dashboard');
-            await loadInventory();
+            
+            // Set role-based UI visibility FIRST, before switching tabs
             const badge = document.getElementById('headerRoleBadge');
-            //document.getElementById('usersTabBtn').style.display = 'none';
             badge.textContent = currentUser.role;
             badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
             document.getElementById('headerUserName').textContent = currentUser.username;
@@ -122,14 +121,10 @@ async function doLogin() {
                 document.getElementById('addVehicleBtn').style.display = 'flex';
             } else {
                 usersTab.style.display = 'none';
-}
-            if (isAdminRole(currentUser.role)) {
-                document.getElementById('actionsHeader').textContent = 'Actions';
-                document.getElementById('addVehicleBtn').style.display = 'flex';
-                document.getElementById('usersTabBtn').style.display = 'inline-flex';
-
             }
-            //await loadInventory();
+            
+            // Now load data and switch tabs
+            await loadInventory();
             switchTab(localStorage.getItem('activeTab') || 'dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
