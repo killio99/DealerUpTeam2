@@ -494,14 +494,6 @@ async function deleteVehicle(vin) {
     }
 }
 
-// Close modal on backdrop click
-document.getElementById('modal').addEventListener('click', function (e) {
-    if (e.target === this) closeModal();
-});
-
-document.getElementById('acqModal').addEventListener('click', function (e) {
-    if (e.target === this) closeAcquisitionEditModal();
-});
 
 // ── Tab Navigation ──────────────────────────────────
 async function switchTab(tab) {
