@@ -64,6 +64,7 @@
     <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
     <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
     <button class="tab-btn" onclick="switchTab('tradein')">Trade-In</button>
+    <button class="tab-btn" id="usersTabBtn" style="display:none;" onclick="switchTab('users')">Users</button>
   </nav>
 
   <!-- ── Inventory Page ── -->
@@ -582,6 +583,7 @@
       <div class="page-title">Trade-In Form</div>
     </div>
 
+
     <!-- Form -->
     <div class="table-wrap" style="padding:24px;">
 
@@ -634,7 +636,57 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── Users Page ── -->
+<div class="page" id="usersPage" style="display:none; padding: 28px 24px; max-width:900px; margin:0 auto;">
+  <div class="page-hdr">
+    <div class="page-title">Users</div>
+    <button class="btn-add" onclick="openCreateUserModal()">+ Create User</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="usersBody">
+        <tr>
+          <td colspan="3">Loading users...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
   <!-- ── Add / Edit Modal ── -->
+
+  <div class="modal-backdrop" id="createUserModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-title">Create User</div>
+
+    <label>Username</label>
+    <input type="text" id="newUsername" placeholder="username" />
+
+    <label>Password</label>
+    <input type="password" id="newPassword" placeholder="password" />
+
+    <label>Role</label>
+    <select id="newUserRole">
+      <option value="employee">Employee</option>
+      <option value="admin">Admin</option>
+    </select>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCreateUserModal()">Cancel</button>
+      <button class="btn-save" onclick="createUser()">Create</button>
+    </div>
+  </div>
+</div>
+
   <div class="modal-backdrop" id="modal">
     <div class="modal">
       <div class="modal-title" id="modalTitle">Add vehicle</div>

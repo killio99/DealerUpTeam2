@@ -57,6 +57,7 @@ function restoreSessionIfExists() {
         if (isAdminRole(currentUser.role)) {
             document.getElementById('actionsHeader').textContent = 'Actions';
             document.getElementById('addVehicleBtn').style.display = 'flex';
+            document.getElementById('usersTabBtn').style.display = 'inline-block';
         }
         loadInventory();
         switchTab(localStorage.getItem('activeTab') || 'dashboard');
@@ -106,15 +107,29 @@ async function doLogin() {
             saveSession(user); // Save to sessionStorage
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
+            switchTab(localStorage.getItem('activeTab') || 'dashboard');
+            await loadInventory();
             const badge = document.getElementById('headerRoleBadge');
+            //document.getElementById('usersTabBtn').style.display = 'none';
             badge.textContent = currentUser.role;
             badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
             document.getElementById('headerUserName').textContent = currentUser.username;
+            
+            const usersTab = document.getElementById('usersTabBtn');
+            if (isAdminRole(currentUser.role)) {
+                usersTab.style.display = 'inline-flex';
+                document.getElementById('actionsHeader').textContent = 'Actions';
+                document.getElementById('addVehicleBtn').style.display = 'flex';
+            } else {
+                usersTab.style.display = 'none';
+}
             if (isAdminRole(currentUser.role)) {
                 document.getElementById('actionsHeader').textContent = 'Actions';
                 document.getElementById('addVehicleBtn').style.display = 'flex';
+                document.getElementById('usersTabBtn').style.display = 'inline-flex';
+
             }
-            await loadInventory();
+            //await loadInventory();
             switchTab(localStorage.getItem('activeTab') || 'dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
@@ -198,6 +213,38 @@ async function loadInventory() {
         renderStats();
     } catch (err) {
         console.error('Failed to load inventory:', err.message);
+    }
+}
+
+async function loadUsers() {
+    console.log("loadUsers fired");
+    try {
+        const users = await db.users.getAll();
+
+        const body = document.getElementById('usersBody');
+        body.innerHTML = '';
+
+        if (!users || users.length === 0) {
+            body.innerHTML = '<tr><td colspan="3">No users found</td></tr>';
+            return;
+        }
+
+        users.forEach(user => {
+            if (user.username === currentUser.username) return;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${user.username}</td>
+                <td>${user.role}</td>
+                <td>
+                    <button onclick="deleteUser('${user.user_id}')">Delete</button>
+                </td>
+            `;
+            body.appendChild(row);
+        });
+
+    } catch (err) {
+        console.error('Failed to load users:', err.message);
     }
 }
 
@@ -398,6 +445,30 @@ async function saveVehicle() {
         alert('Save failed: ' + err.message);
     }
 }
+async function openCreateUserModal() {
+    const username = prompt("Username:");
+    const password = prompt("Password:");
+    const role = prompt("Role (admin/employee):");
+
+    if (!username || !password || !role) return;
+
+    try {
+        await db.users.insert({ username, password, role });
+        await loadUsers();
+    } catch (err) {
+        alert('Failed to create user: ' + err.message);
+    }
+}
+async function deleteUser(userId) {
+    if (!confirm("Delete this user?")) return;
+
+    try {
+        await db.users.delete(userId);
+        await loadUsers();
+    } catch (err) {
+        alert('Failed to delete user: ' + err.message);
+    }
+}
 
 async function deleteVehicle(vin) {
     if (!confirm('Remove this vehicle from inventory?')) return;
@@ -432,9 +503,10 @@ async function switchTab(tab) {
     mysales: document.getElementById('mysalesPage'),
     transactions: document.getElementById('transactionsPage'),
     tradein: document.getElementById('tradeinPage'),
+    users: document.getElementById('usersPage')
   };
   const tabs = document.querySelectorAll('.tab-btn');
-    const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein'];
+    const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein', 'users'];
 
   // Hide sale form and messages when leaving My Sales tab
   if (tab !== 'mysales') {
@@ -453,6 +525,11 @@ async function switchTab(tab) {
   if (tab === 'tradein') generateTradeInVin();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
+  if (tab === 'users') {
+    console.log("Switching to users tab");
+    await loadUsers();
+}
+
 }
 
 // ── Filters ──────────────────────────────────────────
@@ -1525,4 +1602,43 @@ function renderStatusChart(inventoryData) {
             }
         }
     });
+}
+
+
+
+function openCreateUserModal() {
+  document.getElementById("createUserModal").style.display = "flex";
+}
+
+function closeCreateUserModal() {
+  document.getElementById("createUserModal").style.display = "none";
+}
+
+async function createUser() {
+  const username = document.getElementById("newUsername").value.trim().toLowerCase();
+  const password = document.getElementById("newPassword").value;
+  const role = document.getElementById("newUserRole").value;
+
+  if (!username || !password) {
+    alert("Missing username or password");
+    return;
+  }
+
+  try {
+    await db.users.create({
+      username,
+      password,
+      role
+    });
+
+    closeCreateUserModal();
+
+    // refresh table
+    if (typeof loadUsers === "function") loadUsers();
+
+    alert("User created!");
+  } catch (err) {
+    console.error(err);
+    alert("Failed to create user");
+  }
 }
