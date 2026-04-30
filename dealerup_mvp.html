@@ -10,6 +10,66 @@
 </head>
 <body>
 
+<!-- ── Loading Screen ── -->
+<div id="loadingScreen" style="
+  position:fixed; inset:0; z-index:9999;
+  background:#0a1628;
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:20px;
+  transition: opacity 0.5s ease;
+">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="#4a7fe5">
+      <path d="M5 17H3V11L5.5 6H18.5L21 11V17H19C19 18.1 18.1 19 17 19C15.9 19 15 18.1 15 17H9C9 18.1 8.1 19 7 19C5.9 19 5 18.1 5 17ZM17 15.5C17.8 15.5 18.5 16.2 18.5 17C18.5 17.8 17.8 18.5 17 18.5C16.2 18.5 15.5 17.8 15.5 17C15.5 16.2 16.2 15.5 17 15.5ZM7 15.5C7.8 15.5 8.5 16.2 8.5 17C8.5 17.8 7.8 18.5 7 18.5C6.2 18.5 5.5 17.8 5.5 17C5.5 16.2 6.2 15.5 7 15.5ZM6.2 10H17.8L16.2 7H7.8L6.2 10Z"/>
+    </svg>
+    <span style="color:#fff; font-family:'IBM Plex Sans',sans-serif; font-size:22px; font-weight:500; letter-spacing:0.01em;">DealerUp</span>
+  </div>
+  <div style="width:160px; height:3px; background:#1e2f4a; border-radius:99px; overflow:hidden;">
+    <div id="loadingBar" style="height:100%; width:0%; background:#4a7fe5; border-radius:99px; transition:width 0.4s ease;"></div>
+  </div>
+  <div style="color:#5a7a9a; font-family:'IBM Plex Sans',sans-serif; font-size:13px;" id="loadingText">Starting up...</div>
+</div>
+
+<script>
+  (function() {
+    let _loaderRunning = false;
+    window.__dismissLoader = function() {
+      if (_loaderRunning) return;
+      _loaderRunning = true;
+      const bar = document.getElementById('loadingBar');
+      const text = document.getElementById('loadingText');
+      const screen = document.getElementById('loadingScreen');
+      const steps = [
+        [15, 'Connecting...'],
+        [45, 'Loading inventory...'],
+        [75, 'Setting up workspace...'],
+        [95, 'Almost ready...'],
+      ];
+      let i = 0;
+      function next() {
+        if (i >= steps.length) return;
+        bar.style.width = steps[i][0] + '%';
+        text.textContent = steps[i][1];
+        i++;
+        if (i < steps.length) setTimeout(next, 250);
+      }
+      next();
+      setTimeout(function() {
+        bar.style.width = '100%';
+        text.textContent = 'Ready!';
+        setTimeout(function() {
+          screen.style.opacity = '0';
+          setTimeout(function() {
+            screen.style.display = 'none';
+            _loaderRunning = false;
+          }, 500);
+        }, 300);
+      }, steps.length * 200 + 150);
+    };
+  })();
+</script>
+
 <!-- ── Login Screen ── -->
 <div class="login-wrap" id="loginScreen">
   <div class="login-card">

@@ -103,8 +103,12 @@ async function doLogin() {
     try {
         const user = await db.users.login(u, p);
         if (user) {
-            currentUser = user; // { user_id, username, role }
-            saveSession(user); // Save to sessionStorage
+            // Show loader as soon as credentials are confirmed
+            document.getElementById('loadingScreen').style.display = 'flex';
+            window.__dismissLoader?.();
+
+            currentUser = user;
+            saveSession(user);
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
             
@@ -144,6 +148,7 @@ function doLogout() {
     document.getElementById('loginPass').value = '';
     document.getElementById('loginError').style.display = 'none';
     document.getElementById('actionsHeader').textContent = '';
+    localStorage.removeItem('activeTab'); 
 }
 
 function generateVin() {
