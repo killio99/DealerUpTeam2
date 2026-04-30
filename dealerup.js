@@ -220,8 +220,13 @@ async function loadUsers() {
     console.log("loadUsers fired");
     try {
         const users = await db.users.getAll();
+        console.log("Users fetched:", users);
 
         const body = document.getElementById('usersBody');
+        if (!body) {
+            console.error('usersBody element not found');
+            return;
+        }
         body.innerHTML = '';
 
         if (!users || users.length === 0) {
@@ -229,22 +234,36 @@ async function loadUsers() {
             return;
         }
 
+        let hasUsers = false;
         users.forEach(user => {
-            if (user.username === currentUser.username) return;
-
+            const isCurrentUser = user.username === currentUser?.username;
             const row = document.createElement('tr');
+            const usernameDisplay = isCurrentUser ? `${user.username} <span style="color:var(--muted); font-size:12px;">(You)</span>` : user.username;
+            const deleteButton = isCurrentUser 
+                ? '<span style="color:var(--muted); font-size:12px;">—</span>'
+                : `<button class="btn-sm danger" onclick="deleteUser('${user.user_id}')">Delete</button>`;
+            
             row.innerHTML = `
-                <td>${user.username}</td>
+                <td>${usernameDisplay}</td>
                 <td>${user.role}</td>
                 <td>
-                    <button onclick="deleteUser('${user.user_id}')">Delete</button>
+                    ${deleteButton}
                 </td>
             `;
             body.appendChild(row);
+            hasUsers = true;
         });
+
+        if (!hasUsers) {
+            body.innerHTML = '<tr><td colspan="3">No users found</td></tr>';
+        }
 
     } catch (err) {
         console.error('Failed to load users:', err.message);
+        const body = document.getElementById('usersBody');
+        if (body) {
+            body.innerHTML = `<tr><td colspan="3"><div style="color:red;">Error loading users: ${err.message}</div></td></tr>`;
+        }
     }
 }
 
@@ -443,20 +462,6 @@ async function saveVehicle() {
     } catch (err) {
         setAcquisitionModalLoading(false);
         alert('Save failed: ' + err.message);
-    }
-}
-async function openCreateUserModal() {
-    const username = prompt("Username:");
-    const password = prompt("Password:");
-    const role = prompt("Role (admin/employee):");
-
-    if (!username || !password || !role) return;
-
-    try {
-        await db.users.insert({ username, password, role });
-        await loadUsers();
-    } catch (err) {
-        alert('Failed to create user: ' + err.message);
     }
 }
 async function deleteUser(userId) {
@@ -1604,8 +1609,6 @@ function renderStatusChart(inventoryData) {
     });
 }
 
-
-
 function openCreateUserModal() {
   document.getElementById("createUserModal").style.display = "flex";
 }
@@ -1617,19 +1620,18 @@ function closeCreateUserModal() {
 async function createUser() {
   const username = document.getElementById("newUsername").value.trim().toLowerCase();
   const password = document.getElementById("newPassword").value;
-  const role = document.getElementById("newUserRole").value;
+  let role = document.getElementById("newUserRole").value;
 
   if (!username || !password) {
     alert("Missing username or password");
     return;
   }
 
+  // Capitalize role for database constraint
+  role = role.charAt(0).toUpperCase() + role.slice(1);
+
   try {
-    await db.users.create({
-      username,
-      password,
-      role
-    });
+    await db.users.create(username, password, role);
 
     closeCreateUserModal();
 

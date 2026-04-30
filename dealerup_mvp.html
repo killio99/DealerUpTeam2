@@ -636,33 +636,32 @@
     </div>
   </div>
 
-</div>
+  <!-- ── Users Page ── -->
+  <div class="page" id="usersPage" style="display:none; padding: 28px 24px; max-width:900px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Users</div>
+      <button class="btn-add" onclick="openCreateUserModal()">+ Create User</button>
+    </div>
 
-<!-- ── Users Page ── -->
-<div class="page" id="usersPage" style="display:none; padding: 28px 24px; max-width:900px; margin:0 auto;">
-  <div class="page-hdr">
-    <div class="page-title">Users</div>
-    <button class="btn-add" onclick="openCreateUserModal()">+ Create User</button>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersBody">
+          <tr>
+            <td colspan="3">Loading users...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Role</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="usersBody">
-        <tr>
-          <td colspan="3">Loading users...</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
 </div>
-  <!-- ── Add / Edit Modal ── -->
 
   <div class="modal-backdrop" id="createUserModal" style="display:none;">
   <div class="modal">

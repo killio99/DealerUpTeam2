@@ -259,6 +259,14 @@ select {
     outline: none;
 }
 
+input::placeholder {
+    color: var(--muted);
+}
+
+body.dark-mode input::placeholder {
+    color: #b8b5ad;
+}
+
 input:focus,
 select:focus {
     border-color: var(--accent);
@@ -648,10 +656,15 @@ tbody tr:hover td {
     font-size: 13px;
     cursor: pointer;
     font-family: var(--font);
+    color: var(--text);
 }
 
 .btn-cancel:hover {
     background: var(--bg);
+}
+
+body.dark-mode .btn-cancel {
+    color: #b8b5ad;
 }
 
 .btn-save {
