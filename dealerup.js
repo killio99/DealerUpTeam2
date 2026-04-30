@@ -1,78 +1,8 @@
-// ── Dark Mode ─────────────────────────────────────────
-function initDarkMode() {
-    // Check if user has saved preference, otherwise check system preference
-    const savedMode = localStorage.getItem('darkMode');
-    const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    if (savedMode === 'true' || (savedMode === null && systemDark)) {
-        enableDarkMode();
-    }
-}
-
-function toggleDarkMode() {
-    if (document.body.classList.contains('dark-mode')) {
-        disableDarkMode();
-    } else {
-        enableDarkMode();
-    }
-}
-
-function enableDarkMode() {
-    document.body.classList.add('dark-mode');
-    localStorage.setItem('darkMode', 'true');
-}
-
-function disableDarkMode() {
-    document.body.classList.remove('dark-mode');
-    localStorage.setItem('darkMode', 'false');
-}
-
-// Initialize dark mode on page load
-window.addEventListener('DOMContentLoaded', initDarkMode);
-
-// ── Session Persistence ────────────────────────────────
-function saveSession(user) {
-    sessionStorage.setItem('currentUser', JSON.stringify(user));
-}
-
-function loadSession() {
-    const saved = sessionStorage.getItem('currentUser');
-    return saved ? JSON.parse(saved) : null;
-}
-
-function clearSession() {
-    sessionStorage.removeItem('currentUser');
-}
-
-function restoreSessionIfExists() {
-    const user = loadSession();
-    if (user) {
-        currentUser = user;
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('app').classList.add('visible');
-        const badge = document.getElementById('headerRoleBadge');
-        badge.textContent = currentUser.role;
-        badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
-        document.getElementById('headerUserName').textContent = currentUser.username;
-        if (isAdminRole(currentUser.role)) {
-            document.getElementById('actionsHeader').textContent = 'Actions';
-            document.getElementById('addVehicleBtn').style.display = 'flex';
-            document.getElementById('usersTabBtn').style.display = 'inline-block';
-        }
-        loadInventory();
-        switchTab(localStorage.getItem('activeTab') || 'dashboard');
-    }
-}
-
-// Restore session on page load
-window.addEventListener('DOMContentLoaded', restoreSessionIfExists);
-
 // ── Auth ──────────────────────────────────────────────
 let currentUser = null;
 let saleFormLoadedDraftSnapshot = null;
 let approvingAcquisition = null;
 let acquisitionResultHideTimer = null;
-let saleResultHideTimer = null;
 let acquisitionLoading = { id: null, action: null };
 
 // Maps DB role values to CSS class names used in styles.css
@@ -104,33 +34,20 @@ async function doLogin() {
         const user = await db.users.login(u, p);
         if (user) {
             currentUser = user; // { user_id, username, role }
-            saveSession(user); // Save to sessionStorage
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('app').classList.add('visible');
-            switchTab(localStorage.getItem('activeTab') || 'dashboard');
-            await loadInventory();
             const badge = document.getElementById('headerRoleBadge');
-            //document.getElementById('usersTabBtn').style.display = 'none';
             badge.textContent = currentUser.role;
             badge.className = 'role-badge role-' + getRoleCssClass(currentUser.role);
             document.getElementById('headerUserName').textContent = currentUser.username;
-            
-            const usersTab = document.getElementById('usersTabBtn');
-            if (isAdminRole(currentUser.role)) {
-                usersTab.style.display = 'inline-flex';
-                document.getElementById('actionsHeader').textContent = 'Actions';
-                document.getElementById('addVehicleBtn').style.display = 'flex';
-            } else {
-                usersTab.style.display = 'none';
-}
             if (isAdminRole(currentUser.role)) {
                 document.getElementById('actionsHeader').textContent = 'Actions';
                 document.getElementById('addVehicleBtn').style.display = 'flex';
-                document.getElementById('usersTabBtn').style.display = 'inline-flex';
-
+                // Show Customers tab for admins only
+                document.getElementById('customersTabBtn').style.display = '';
             }
-            //await loadInventory();
-            switchTab(localStorage.getItem('activeTab') || 'dashboard');
+            await loadInventory();
+            switchTab('dashboard');
         } else {
             document.getElementById('loginError').style.display = 'block';
         }
@@ -142,13 +59,14 @@ async function doLogin() {
 
 function doLogout() {
     currentUser = null;
-    clearSession(); // Clear from sessionStorage
     document.getElementById('app').classList.remove('visible');
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('loginUser').value = '';
     document.getElementById('loginPass').value = '';
     document.getElementById('loginError').style.display = 'none';
     document.getElementById('actionsHeader').textContent = '';
+    // Hide Customers tab on logout
+    document.getElementById('customersTabBtn').style.display = 'none';
 }
 
 function generateVin() {
@@ -170,7 +88,6 @@ let sortCol = null;
 let sortDir = 'asc';
 let acquisitionsCache = [];
 let acquisitionScope = 'mine';
-let acquisitionRequestFormVisible = false;
 
 function sortInventory(col) {
     if (sortCol === col) {
@@ -216,42 +133,9 @@ async function loadInventory() {
     }
 }
 
-async function loadUsers() {
-    console.log("loadUsers fired");
-    try {
-        const users = await db.users.getAll();
-
-        const body = document.getElementById('usersBody');
-        body.innerHTML = '';
-
-        if (!users || users.length === 0) {
-            body.innerHTML = '<tr><td colspan="3">No users found</td></tr>';
-            return;
-        }
-
-        users.forEach(user => {
-            if (user.username === currentUser.username) return;
-
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${user.username}</td>
-                <td>${user.role}</td>
-                <td>
-                    <button onclick="deleteUser('${user.user_id}')">Delete</button>
-                </td>
-            `;
-            body.appendChild(row);
-        });
-
-    } catch (err) {
-        console.error('Failed to load users:', err.message);
-    }
-}
-
 function renderStats() {
-    const active = inventory.filter(v => v.status !== 'Sold');
-    document.getElementById('statTotal').textContent = active.length;
-    document.getElementById('statAvailable').textContent = active.filter(v => v.status === 'Available').length;
+    document.getElementById('statTotal').textContent = inventory.length;
+    document.getElementById('statAvailable').textContent = inventory.filter(v => v.status === 'Available').length;
     document.getElementById('statSold').textContent = inventory.filter(v => v.status === 'Sold').length;
 }
 
@@ -261,7 +145,6 @@ function renderTable() {
   const statusF = document.getElementById('statusFilter')?.value || '';
 
     const filtered = inventory.filter(v => {
-    if (v.status === 'Sold') return false;
     const matchSearch = !q || (v.make ?? '').toLowerCase().includes(q) ||
         (v.model ?? '').toLowerCase().includes(q) ||
         (v.vin ?? '').toLowerCase().includes(q) ||
@@ -409,22 +292,6 @@ async function saveVehicle() {
             }
             try {
                 await db.acquisitions.approve(approvingAcquisition.acquisition_id);
-                
-                // If this is a trade-in, create customer record with amount owed
-                if (approvingAcquisition.notes && approvingAcquisition.notes.includes('Customer:')) {
-                    const notes = approvingAcquisition.notes;
-                    const customerMatch = notes.match(/Customer:\s*([^|]+)/);
-                    const valueMatch = notes.match(/Value:\s*\$([\d,.]+)/);
-                    if (customerMatch && valueMatch) {
-                        const customerName = customerMatch[1].trim();
-                        const value = parseFloat(valueMatch[1].replace(/,/g, ''));
-                        await db.customers.insert({
-                            customer_name: customerName,
-                            phone: null,
-                            amount_owed: -value,
-                        });
-                    }
-                }
             } catch (approveErr) {
                 try {
                     await db.inventory.delete(vin);
@@ -445,32 +312,13 @@ async function saveVehicle() {
         alert('Save failed: ' + err.message);
     }
 }
-async function openCreateUserModal() {
-    const username = prompt("Username:");
-    const password = prompt("Password:");
-    const role = prompt("Role (admin/employee):");
-
-    if (!username || !password || !role) return;
-
-    try {
-        await db.users.insert({ username, password, role });
-        await loadUsers();
-    } catch (err) {
-        alert('Failed to create user: ' + err.message);
-    }
-}
-async function deleteUser(userId) {
-    if (!confirm("Delete this user?")) return;
-
-    try {
-        await db.users.delete(userId);
-        await loadUsers();
-    } catch (err) {
-        alert('Failed to delete user: ' + err.message);
-    }
-}
 
 async function deleteVehicle(vin) {
+    const vehicle = inventory.find(v => v.vin === vin);
+    if (vehicle?.status === 'Sold') {
+        alert('Cannot delete a sold vehicle. It is linked to a sales record.');
+        return;
+    }
     if (!confirm('Remove this vehicle from inventory?')) return;
     try {
         await db.inventory.delete(vin);
@@ -495,24 +343,17 @@ document.getElementById('acqModal').addEventListener('click', function (e) {
 
 // ── Tab Navigation ──────────────────────────────────
 async function switchTab(tab) {
-  localStorage.setItem('activeTab', tab);
   const pages = {
     dashboard: document.getElementById('dashboardPage'),
     inventory: document.getElementById('inventoryPage'),
-        acquisitions: document.getElementById('acquisitionsPage'),
+    acquisitions: document.getElementById('acquisitionsPage'),
     mysales: document.getElementById('mysalesPage'),
     transactions: document.getElementById('transactionsPage'),
     tradein: document.getElementById('tradeinPage'),
-    users: document.getElementById('usersPage')
+    customers: document.getElementById('customersPage'),
   };
   const tabs = document.querySelectorAll('.tab-btn');
-    const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein', 'users'];
-
-  // Hide sale form and messages when leaving My Sales tab
-  if (tab !== 'mysales') {
-    closeSaleForm();
-    hideSaleStatusMessage();
-  }
+  const order = ['dashboard', 'inventory', 'acquisitions', 'mysales', 'transactions', 'tradein', 'customers'];
 
   Object.values(pages).forEach(p => p.style.display = 'none');
   tabs.forEach(t => t.classList.remove('active'));
@@ -521,15 +362,11 @@ async function switchTab(tab) {
   tabs[order.indexOf(tab)].classList.add('active');
 
   if (tab === 'dashboard') await loadDashboard();
-    if (tab === 'acquisitions') await loadAcquisitions();
+  if (tab === 'acquisitions') await loadAcquisitions();
   if (tab === 'tradein') generateTradeInVin();
   if (tab === 'transactions') await loadTransactions();
   if (tab === 'mysales') await loadMySales();
-  if (tab === 'users') {
-    console.log("Switching to users tab");
-    await loadUsers();
-}
-
+  if (tab === 'customers') await loadCustomers();
 }
 
 // ── Filters ──────────────────────────────────────────
@@ -551,20 +388,6 @@ function renderAcquisitionScopeButtons() {
     if (allBtn) allBtn.classList.toggle('active', acquisitionScope === 'all');
 }
 
-function syncAcquisitionRequestFormVisibility() {
-    const formWrap = document.getElementById('acqRequestFormWrap');
-    const toggleBtn = document.getElementById('acqRequestToggleBtn');
-    if (formWrap) formWrap.style.display = acquisitionRequestFormVisible ? 'block' : 'none';
-    if (toggleBtn) {
-        toggleBtn.style.display = acquisitionRequestFormVisible ? 'none' : 'inline-flex';
-    }
-}
-
-function toggleAcquisitionRequestForm() {
-    acquisitionRequestFormVisible = !acquisitionRequestFormVisible;
-    syncAcquisitionRequestFormVisibility();
-}
-
 async function loadAcquisitions() {
     const roleLabel = document.getElementById('acqRoleLabel');
     const isAdmin = isAdminRole(currentUser?.role);
@@ -576,7 +399,6 @@ async function loadAcquisitions() {
 
     document.getElementById('acqAdminView').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('acqEmployeeView').style.display = isAdmin ? 'none' : 'block';
-    if (!isAdmin) syncAcquisitionRequestFormVisibility();
 
     try {
         acquisitionsCache = await db.acquisitions.getAll();
@@ -691,8 +513,6 @@ function clearAcquisitionRequestForm(hideResult = true) {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
-    acquisitionRequestFormVisible = false;
-    syncAcquisitionRequestFormVisibility();
     if (hideResult) document.getElementById('acqEmployeeResult').style.display = 'none';
 }
 
@@ -983,24 +803,8 @@ function clearTradeInForm() {
     document.getElementById('tiResult').style.display = 'none';
 }
 
-function hideSaleStatusMessage() {
-    const status = document.getElementById('saleStatusMessage');
-    if (status) status.style.display = 'none';
-}
-
-function showSaleStatusMessage(type, message) {
-    const status = document.getElementById('saleStatusMessage');
-    const text = document.getElementById('saleStatusText');
-    if (!status || !text) return;
-    status.style.display = 'block';
-    text.textContent = message;
-    text.style.color = type === 'success' ? 'var(--success-text)' : 'var(--danger-text)';
-    text.style.background = type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)';
-    text.style.border = type === 'success' ? '1px solid #b7d98b' : '1px solid #f7c1c1';
-}
-
 function clearSaleForm() {
-    ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleMileage', 'saleDate', 'saleNotes'].forEach(id => {
+    ['saleCustomerName', 'saleCustomerPhone', 'saleVin', 'salePrice', 'saleDate', 'saleNotes'].forEach(id => {
         document.getElementById(id).value = '';
     });
     document.getElementById('saleDraftId').value = '';
@@ -1008,9 +812,6 @@ function clearSaleForm() {
     if (picker) picker.value = '';
     const info = document.getElementById('saleSelectedVehicleInfo');
     if (info) info.style.display = 'none';
-    const result = document.getElementById('saleResult');
-    if (result) result.style.display = 'none';
-    hideSaleStatusMessage();
 }
 
 function getSaleFormData() {
@@ -1019,7 +820,6 @@ function getSaleFormData() {
         customerPhone: document.getElementById('saleCustomerPhone').value.trim(),
         vin: document.getElementById('saleVin').value.trim().toUpperCase(),
         amount: document.getElementById('salePrice').value.trim(),
-        mileage: document.getElementById('saleMileage').value.trim(),
         saleDate: document.getElementById('saleDate').value,
         notes: document.getElementById('saleNotes').value.trim(),
     };
@@ -1040,7 +840,6 @@ function openSaleForm() {
         if (save) saveSaleDraft();
     }
     clearSaleForm();
-    hideSaleStatusMessage();
     populateSaleVehiclePicker();
     const section = document.getElementById('saleFormSection');
     section.style.display = 'block';
@@ -1072,7 +871,6 @@ function populateSaleVehiclePicker() {
         `;
         document.getElementById('saleSelectedVehicleInfo').style.display = 'block';
         if (v.listed_sale) document.getElementById('salePrice').value = v.listed_sale;
-        if (v.mileage != null) document.getElementById('saleMileage').value = v.mileage;
     };
 }
 
@@ -1082,10 +880,6 @@ function closeSaleForm() {
 
 function showSaleResult(type, message) {
     const el = document.getElementById('saleResult');
-    if (saleResultHideTimer) {
-        clearTimeout(saleResultHideTimer);
-        saleResultHideTimer = null;
-    }
     el.style.display = 'block';
     el.style.padding = '10px 14px';
     el.style.borderRadius = 'var(--radius)';
@@ -1100,19 +894,11 @@ function showSaleResult(type, message) {
         el.style.border = '1px solid #f7c1c1';
     }
     el.textContent = message;
-
-    if (type === 'success') {
-        saleResultHideTimer = setTimeout(() => {
-            el.style.display = 'none';
-            saleResultHideTimer = null;
-        }, 2500);
-    }
 }
 
 function getSaleDrafts() {
     try {
-        const key = `saleDrafts_${currentUser.user_id}`;
-        const raw = localStorage.getItem(key);
+        const raw = localStorage.getItem('saleDrafts');
         return raw ? JSON.parse(raw) : [];
     } catch (err) {
         return [];
@@ -1120,8 +906,7 @@ function getSaleDrafts() {
 }
 
 function saveSaleDrafts(drafts) {
-    const key = `saleDrafts_${currentUser.user_id}`;
-    localStorage.setItem(key, JSON.stringify(drafts));
+    localStorage.setItem('saleDrafts', JSON.stringify(drafts));
 }
 
 function saveSaleDraft() {
@@ -1129,23 +914,17 @@ function saveSaleDraft() {
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
     const amount = document.getElementById('salePrice').value.trim();
-    const mileage = document.getElementById('saleMileage').value.trim();
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value || `draft-${Date.now()}`;
 
-    if (!customerName && !customerPhone && !vin && !amount && !mileage && !saleDate && !notes) {
+    if (!customerName && !customerPhone && !vin && !amount && !saleDate && !notes) {
         showSaleResult('error', 'Enter at least one field before saving a draft.');
         return;
     }
 
     const vehicle = inventory.find(v => v.vin === vin);
     const vehicleLabel = vehicle ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() : '';
-
-    if (vehicle && vehicle.status === 'Sold') {
-        showSaleResult('error', 'Cannot save a draft for a vehicle that is already sold.');
-        return;
-    }
 
     const drafts = getSaleDrafts();
     const existingIndex = drafts.findIndex(d => d.id === draftId);
@@ -1157,7 +936,6 @@ function saveSaleDraft() {
         vin,
         vehicleLabel,
         amount,
-        mileage,
         saleDate,
         notes,
     };
@@ -1174,9 +952,7 @@ function saveSaleDraft() {
     saleFormLoadedDraftSnapshot = getSaleFormData();
     document.getElementById('saleDraftId').value = draftId;
     renderDraftsList();
-    clearSaleForm();
-    closeSaleForm();
-    showSaleStatusMessage('success', 'Draft saved successfully!');
+    showSaleResult('success', 'Draft saved successfully!');
 }
 
 function openDraftsModal() {
@@ -1256,7 +1032,6 @@ function editDraft(id) {
     }
 
     document.getElementById('salePrice').value = draft.amount;
-    document.getElementById('saleMileage').value = draft.mileage || '';
     document.getElementById('saleDate').value = draft.saleDate || '';
     document.getElementById('saleNotes').value = draft.notes;
     saleFormLoadedDraftSnapshot = getSaleFormData();
@@ -1274,7 +1049,6 @@ async function submitSale() {
     const customerPhone = document.getElementById('saleCustomerPhone').value.trim();
     const vin = document.getElementById('saleVin').value.trim().toUpperCase();
     const amount = Number(document.getElementById('salePrice').value);
-    const mileage = parseInt(document.getElementById('saleMileage').value, 10);
     const saleDate = document.getElementById('saleDate').value;
     const notes = document.getElementById('saleNotes').value.trim();
     const draftId = document.getElementById('saleDraftId').value;
@@ -1302,15 +1076,11 @@ async function submitSale() {
         return;
     }
 
+    const previousStatus = vehicle.status;
     let inventoryUpdated = false;
 
     try {
-        const previousStatus = vehicle.status;
-        const updatePayload = { status: 'Sold' };
-        if (!Number.isNaN(mileage)) {
-            updatePayload.mileage = mileage;
-        }
-        await db.inventory.update(vin, updatePayload);
+        await db.inventory.update(vin, { status: 'Sold' });
         inventoryUpdated = true;
 
         const customer = await db.customers.insert({
@@ -1337,16 +1107,22 @@ async function submitSale() {
         await loadInventory();
         const v = inventory.find(x => x.vin === vin);
         const label = v ? `${v.year ?? ''} ${v.make ?? ''} ${v.model ?? ''}`.trim() : vin;
+        showSaleResult('success', `Sale submitted successfully!`);
+        // remove draft if it existed
+        if (draftId) {
+            const drafts = getSaleDrafts().filter(d => d.id !== draftId);
+            saveSaleDrafts(drafts);
+            renderDraftsList();
+            document.getElementById('saleDraftId').value = '';
+        }
         clearSaleForm();
-        closeSaleForm();
-        showSaleStatusMessage('success', 'Sale submitted successfully!');
         loadMySales();
     } catch (err) {
         if (inventoryUpdated) {
             try {
                 await db.inventory.update(vin, { status: previousStatus });
             } catch (rollbackErr) {
-                console.error('Failed to revert inventory status:', rollbackErr.message);
+                console.error('Failed to revert inventory status after sale submission error:', rollbackErr.message);
             }
         }
         console.error('Sale submission failed:', err.message);
@@ -1467,13 +1243,13 @@ async function loadDashboard() {
             ? acquisitions.filter(a => a.created_at && new Date(a.created_at) >= filterStart)
             : acquisitions;
 
-        document.getElementById('dashTotal').textContent = inventoryData.filter(v => v.status !== 'Sold').length;
+        document.getElementById('dashTotal').textContent = inventoryData.length;
         document.getElementById('dashAvailable').textContent = inventoryData.filter(v => v.status === 'Available').length;
         document.getElementById('dashSales').textContent = filterSales.length;
         const revenue = filterSales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         document.getElementById('dashRevenue').textContent = '$' + revenue.toLocaleString();
 
-        document.getElementById('dashPending').textContent = inventoryData.filter(v => v.status === 'Pending').length;
+        document.getElementById('dashPending').textContent = filterSales.filter(s => s.status === 'Pending').length;
         const tradeIns = filterAcq.filter(a => a.notes && a.notes.includes('Value:'));
         const regularAcq = filterAcq.filter(a => !a.notes || !a.notes.includes('Value:'));
         document.getElementById('dashAcquisitions').textContent = regularAcq.length;
@@ -1583,12 +1359,17 @@ function renderStatusChart(inventoryData) {
 
     const available = inventoryData.filter(v => v.status === 'Available').length;
     const pending = inventoryData.filter(v => v.status === 'Pending').length;
+    const sold = inventoryData.filter(v => v.status === 'Sold').length;
 
     _statusChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Available', 'Pending'],
-            datasets: [{ data: [available, pending], backgroundColor: ['#3b6d11', '#854f0b'], borderWidth: 0 }]
+            labels: ['Available', 'Pending', 'Sold'],
+            datasets: [{
+                data: [available, pending, sold],
+                backgroundColor: ['#3b6d11', '#854f0b', '#78766e'],
+                borderWidth: 0,
+            }]
         },
         options: {
             responsive: true,
@@ -1604,41 +1385,88 @@ function renderStatusChart(inventoryData) {
     });
 }
 
+// ── Customers (Admin Only) ────────────────────────────
+let customersCache = [];
 
+async function loadCustomers() {
+    // Guard: only admins should reach this, but double-check
+    if (!isAdminRole(currentUser?.role)) return;
 
-function openCreateUserModal() {
-  document.getElementById("createUserModal").style.display = "flex";
+    const tbody = document.getElementById('customersBody');
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
+
+    try {
+        const [customers, sales] = await Promise.all([
+            db.customers.getAll(),
+            db.sales.getAll(),
+        ]);
+
+        // Attach each customer's sales
+        customersCache = customers.map(c => {
+            const custSales = sales.filter(s => String(s.customer_id) === String(c.customer_id));
+            return { ...c, sales: custSales };
+        });
+
+        // Summary stats
+        const totalRevenue = customersCache.reduce((sum, c) =>
+            sum + c.sales.reduce((s2, s) => s2 + (s.amount_sold ?? 0), 0), 0);
+
+        document.getElementById('custStatTotal').textContent = customersCache.length;
+        document.getElementById('custStatPhone').textContent = customersCache.filter(c => c.phone).length;
+        document.getElementById('custStatRepeat').textContent = customersCache.filter(c => c.sales.length > 1).length;
+        document.getElementById('custStatRevenue').textContent = '$' + totalRevenue.toLocaleString();
+
+        renderCustomersTable();
+    } catch (err) {
+        console.error('Failed to load customers:', err.message);
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+    }
 }
 
-function closeCreateUserModal() {
-  document.getElementById("createUserModal").style.display = "none";
-}
+function renderCustomersTable() {
+    const q = document.getElementById('customerSearch')?.value?.toLowerCase() || '';
 
-async function createUser() {
-  const username = document.getElementById("newUsername").value.trim().toLowerCase();
-  const password = document.getElementById("newPassword").value;
-  const role = document.getElementById("newUserRole").value;
+    const filtered = customersCache.filter(c =>
+        !q ||
+        (c.customer_name ?? '').toLowerCase().includes(q) ||
+        (c.phone ?? '').toLowerCase().includes(q)
+    );
 
-  if (!username || !password) {
-    alert("Missing username or password");
-    return;
-  }
+    const tbody = document.getElementById('customersBody');
 
-  try {
-    await db.users.create({
-      username,
-      password,
-      role
-    });
+    if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No customers found</div><div class="empty-sub">Customers are created automatically when a sale is submitted.</div></div></td></tr>`;
+        return;
+    }
 
-    closeCreateUserModal();
+    tbody.innerHTML = filtered.map(c => {
+        const totalSpent = c.sales.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
+        const sortedSales = [...c.sales].sort((a, b) => new Date(b.date_time ?? 0) - new Date(a.date_time ?? 0));
+        const lastSale = sortedSales[0];
+        const vehicles = c.sales
+            .map(s => s.vehicle_inventory
+                ? `${s.vehicle_inventory.year ?? ''} ${s.vehicle_inventory.make ?? ''} ${s.vehicle_inventory.model ?? ''}`.trim()
+                : s.vin ?? '—')
+            .filter(Boolean)
+            .join(', ') || '—';
 
-    // refresh table
-    if (typeof loadUsers === "function") loadUsers();
-
-    alert("User created!");
-  } catch (err) {
-    console.error(err);
-    alert("Failed to create user");
-  }
+        return `
+            <tr>
+                <td style="color:var(--muted); font-size:12px;">${c.customer_id}</td>
+                <td style="font-weight:500;">${c.customer_name ?? '—'}</td>
+                <td>${c.phone ?? '—'}</td>
+                <td style="font-size:12px; color:var(--muted); max-width:220px;">${vehicles}</td>
+                <td>${totalSpent > 0 ? '$' + totalSpent.toLocaleString() : '—'}</td>
+                <td style="text-align:center;">
+                    ${c.sales.length > 1
+                        ? `<span class="status s-available">${c.sales.length} sales</span>`
+                        : c.sales.length === 1
+                            ? `<span style="font-size:12px; color:var(--muted);">1 sale</span>`
+                            : `<span style="font-size:12px; color:var(--muted);">—</span>`
+                    }
+                </td>
+                <td style="font-size:12px; color:var(--muted);">${lastSale?.date_time ? new Date(lastSale.date_time).toLocaleDateString() : '—'}</td>
+            </tr>
+        `;
+    }).join('');
 }
