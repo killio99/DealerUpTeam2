@@ -177,6 +177,72 @@ let acquisitionsCache = [];
 let acquisitionScope = 'mine';
 let acquisitionRequestFormVisible = false;
 
+let mySalesCache = [];
+let salesSearch = '';
+let salesSortCol = 'date';
+let salesSortDir = 'desc';
+
+let transCache = [];
+let transSearch = '';
+let transSortCol = 'date';
+let transSortDir = 'desc';
+
+let acqSearch = '';
+let acqSortCol = 'date';
+let acqSortDir = 'desc';
+
+function sortRows(rows, col, dir) {
+    return [...rows].sort((a, b) => {
+        let av = a[col], bv = b[col];
+        if (av == null) av = '';
+        if (bv == null) bv = '';
+        if (col === 'date') {
+            return dir === 'asc'
+                ? new Date(av || 0) - new Date(bv || 0)
+                : new Date(bv || 0) - new Date(av || 0);
+        }
+        if (typeof av === 'number' && typeof bv === 'number') {
+            return dir === 'asc' ? av - bv : bv - av;
+        }
+        av = String(av).toLowerCase();
+        bv = String(bv).toLowerCase();
+        if (av < bv) return dir === 'asc' ? -1 : 1;
+        if (av > bv) return dir === 'asc' ? 1 : -1;
+        return 0;
+    });
+}
+
+function filterRows(rows, term, fields) {
+    if (!term) return rows;
+    const t = term.toLowerCase();
+    return rows.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)));
+}
+
+function sortIcon(col, activeCol, dir) {
+    if (col !== activeCol) return ' <span style="opacity:0.3;font-size:10px;">⇅</span>';
+    return dir === 'asc' ? ' <span style="font-size:10px;">▲</span>' : ' <span style="font-size:10px;">▼</span>';
+}
+
+function setSalesSort(col) {
+    if (salesSortCol === col) salesSortDir = salesSortDir === 'asc' ? 'desc' : 'asc';
+    else { salesSortCol = col; salesSortDir = 'asc'; }
+    renderMySales();
+}
+
+function setTransSort(col) {
+    if (transSortCol === col) transSortDir = transSortDir === 'asc' ? 'desc' : 'asc';
+    else { transSortCol = col; transSortDir = 'asc'; }
+    renderTransactions();
+}
+
+function setAcqSort(col) {
+    if (acqSortCol === col) acqSortDir = acqSortDir === 'asc' ? 'desc' : 'asc';
+    else { acqSortCol = col; acqSortDir = 'asc'; }
+    const isAdmin = isAdminRole(currentUser?.role);
+    if (isAdmin) renderAcquisitionsAdmin();
+    else renderAcquisitionsEmployee();
+}
+
 function sortInventory(col) {
     if (sortCol === col) {
         sortDir = sortDir === 'asc' ? 'desc' : 'asc';
@@ -609,13 +675,40 @@ function renderAcquisitionsAdmin() {
         <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">${denied.length}</div></div>
     `;
 
-    const pendingBody = document.getElementById('acqAdminBody');
-    const approvedBody = document.getElementById('acqAdminApprovedBody');
+    const acqCols = [
+        { key: 'id', label: 'ID' },
+        { key: 'vin', label: 'VIN' },
+        { key: 'price', label: 'Price' },
+        { key: 'salesRep', label: 'Sales Rep' },
+        { key: 'notes', label: 'Notes' },
+        { key: 'date', label: 'Date' },
+        { key: 'status', label: 'Status' },
+    ];
+    const thStyle = 'style="cursor:pointer;user-select:none;"';
+    const thCells = acqCols.map(c =>
+        `<th ${thStyle} onclick="setAcqSort('${c.key}')">${c.label}${sortIcon(c.key, acqSortCol, acqSortDir)}</th>`
+    ).join('');
+    document.getElementById('acqAdminPendingHead').innerHTML = `<tr>${thCells}<th>Actions</th></tr>`;
+    document.getElementById('acqAdminApprovedHead').innerHTML = `<tr>${thCells}</tr>`;
 
-    if (!pending.length) {
-        pendingBody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No pending approvals</div><div class="empty-sub">New employee requests will appear here.</div></div></td></tr>`;
+    const normalizeAcq = a => ({
+        id: a.acquisition_id,
+        vin: a.vin ?? '—',
+        price: a.purchase_price,
+        salesRep: String(a.salesman_id ?? '—'),
+        notes: a.notes ?? '—',
+        date: a.created_at,
+        status: a.status ?? '—',
+        _raw: a,
+    });
+    const searchFields = ['id', 'vin', 'salesRep', 'notes', 'status'];
+
+    const pendingBody = document.getElementById('acqAdminBody');
+    let pendingRows = sortRows(filterRows(pending.map(normalizeAcq), acqSearch, searchFields), acqSortCol, acqSortDir);
+    if (!pendingRows.length) {
+        pendingBody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">${acqSearch ? 'No matching requests' : 'No pending approvals'}</div>${acqSearch ? '' : '<div class="empty-sub">New employee requests will appear here.</div>'}</div></td></tr>`;
     } else {
-        pendingBody.innerHTML = pending.map(a => `
+        pendingBody.innerHTML = pendingRows.map(({ _raw: a }) => `
             <tr>
                 <td>${a.acquisition_id}</td>
                 <td class="vin">${a.vin ?? '—'}</td>
@@ -626,18 +719,20 @@ function renderAcquisitionsAdmin() {
                 <td><span class="status s-${a.status?.toLowerCase()}">${a.status ?? '—'}</span></td>
                 <td>
                     <div class="action-btns">
-                        <button class="btn-sm ${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'approve' ? 'loading' : ''}" ${acquisitionLoading.id === a.acquisition_id ? 'disabled' : ''} onclick="openAcquisitionApprovalModal(${a.acquisition_id})">${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'approve' ? '<span class=\"spinner\"></span> Approving' : 'Edit / Approve'}</button>
-                        <button class="btn-sm danger ${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'deny' ? 'loading' : ''}" ${acquisitionLoading.id === a.acquisition_id ? 'disabled' : ''} onclick="denyAcquisition(${a.acquisition_id})">${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'deny' ? '<span class=\"spinner\"></span> Denying' : 'Deny'}</button>
+                        <button class="btn-sm ${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'approve' ? 'loading' : ''}" ${acquisitionLoading.id === a.acquisition_id ? 'disabled' : ''} onclick="openAcquisitionApprovalModal(${a.acquisition_id})">${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'approve' ? '<span class="spinner"></span> Approving' : 'Edit / Approve'}</button>
+                        <button class="btn-sm danger ${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'deny' ? 'loading' : ''}" ${acquisitionLoading.id === a.acquisition_id ? 'disabled' : ''} onclick="denyAcquisition(${a.acquisition_id})">${acquisitionLoading.id === a.acquisition_id && acquisitionLoading.action === 'deny' ? '<span class="spinner"></span> Denying' : 'Deny'}</button>
                     </div>
                 </td>
             </tr>
         `).join('');
     }
 
-    if (!approved.length) {
-        approvedBody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No approved requests yet</div></div></td></tr>`;
+    const approvedBody = document.getElementById('acqAdminApprovedBody');
+    let approvedRows = sortRows(filterRows(approved.map(normalizeAcq), acqSearch, searchFields), acqSortCol, acqSortDir);
+    if (!approvedRows.length) {
+        approvedBody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">${acqSearch ? 'No matching requests' : 'No approved requests yet'}</div></div></td></tr>`;
     } else {
-        approvedBody.innerHTML = approved.map(a => `
+        approvedBody.innerHTML = approvedRows.map(({ _raw: a }) => `
             <tr>
                 <td>${a.acquisition_id}</td>
                 <td class="vin">${a.vin ?? '—'}</td>
@@ -660,24 +755,50 @@ function getVisibleAcquisitionsForEmployee() {
 function renderAcquisitionsEmployee() {
     const visible = getVisibleAcquisitionsForEmployee();
     const mine = acquisitionsCache.filter(a => String(a.salesman_id) === String(currentUser?.user_id));
-    const pending = visible.filter(a => a.status === 'Pending').length;
-    const approved = visible.filter(a => a.status === 'Approved').length;
+    const pendingCount = visible.filter(a => a.status === 'Pending').length;
+    const approvedCount = visible.filter(a => a.status === 'Approved').length;
 
     renderAcquisitionScopeButtons();
 
     document.getElementById('acqEmployeeSummary').innerHTML = `
         <div class="sum-card"><div class="sum-label">My Requests</div><div class="sum-val">${mine.length}</div></div>
-        <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
-        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approved}</div></div>
+        <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pendingCount}</div></div>
+        <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">${approvedCount}</div></div>
     `;
 
+    const acqCols = [
+        { key: 'id', label: 'ID' },
+        { key: 'vin', label: 'VIN' },
+        { key: 'price', label: 'Price' },
+        { key: 'salesRep', label: 'Sales Rep' },
+        { key: 'notes', label: 'Notes' },
+        { key: 'date', label: 'Date' },
+        { key: 'status', label: 'Status' },
+    ];
+    document.getElementById('acqEmployeeHead').innerHTML = `<tr>${acqCols.map(c =>
+        `<th style="cursor:pointer;user-select:none;" onclick="setAcqSort('${c.key}')">${c.label}${sortIcon(c.key, acqSortCol, acqSortDir)}</th>`
+    ).join('')}</tr>`;
+
+    const normalizeAcq = a => ({
+        id: a.acquisition_id,
+        vin: a.vin ?? '—',
+        price: a.purchase_price,
+        salesRep: String(a.salesman_id ?? '—'),
+        notes: a.notes ?? '—',
+        date: a.created_at,
+        status: a.status ?? '—',
+        _raw: a,
+    });
+
     const body = document.getElementById('acqEmployeeBody');
-    if (!visible.length) {
-        body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No acquisition requests yet</div><div class="empty-sub">Create a request using the form above.</div></div></td></tr>`;
+    let rows = sortRows(filterRows(visible.map(normalizeAcq), acqSearch, ['id', 'vin', 'salesRep', 'notes', 'status']), acqSortCol, acqSortDir);
+
+    if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">${acqSearch ? 'No matching requests' : 'No acquisition requests yet'}</div>${acqSearch ? '' : '<div class="empty-sub">Create a request using the form above.</div>'}</div></td></tr>`;
         return;
     }
 
-    body.innerHTML = visible.map(a => `
+    body.innerHTML = rows.map(({ _raw: a }) => `
         <tr>
             <td>${a.acquisition_id}</td>
             <td class="vin">${a.vin ?? '—'}</td>
@@ -812,19 +933,53 @@ document.getElementById('statusFilter').addEventListener('change', () => renderT
 document.getElementById('searchInput').addEventListener('input', () => renderTable());
 
 // ── Transactions ─────────────────────────────────────
+function renderTransactions() {
+    const transCols = [
+        { key: 'type', label: 'Type' },
+        { key: 'id', label: 'ID' },
+        { key: 'vehicle', label: 'Vehicle' },
+        { key: 'vin', label: 'VIN' },
+        { key: 'customerOrNotes', label: 'Customer / Notes' },
+        { key: 'amount', label: 'Amount' },
+        { key: 'date', label: 'Date' },
+        { key: 'status', label: 'Status' },
+    ];
+    document.getElementById('transHead').innerHTML = `<tr>${transCols.map(c =>
+        `<th style="cursor:pointer;user-select:none;" onclick="setTransSort('${c.key}')">${c.label}${sortIcon(c.key, transSortCol, transSortDir)}</th>`
+    ).join('')}</tr>`;
+
+    let rows = sortRows(filterRows(transCache, transSearch, ['type', 'id', 'vehicle', 'vin', 'customerOrNotes', 'status']), transSortCol, transSortDir);
+
+    const tbody = document.getElementById('transactionsBody');
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">${transSearch ? 'No matching records' : 'No records yet'}</div>${transSearch ? '' : '<div class="empty-sub">Sales, acquisitions, and trade-ins will appear here.</div>'}</div></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `
+        <tr>
+            <td><span class="status ${r.typeCss}">${r.type}</span></td>
+            <td>${r.id}</td>
+            <td>${r.vehicle}</td>
+            <td class="vin">${r.vin}</td>
+            <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
+            <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
+            <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
+            <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
+        </tr>
+    `).join('');
+}
+
 async function loadTransactions() {
     const tbody = document.getElementById('transactionsBody');
     tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
 
     try {
-        // fetch all three sources in parallel
         const [sales, acquisitions, transactions] = await Promise.all([
             db.sales.getAll(),
             db.acquisitions.getAll(),
             db.transactions.getAll(),
         ]);
-        
-        // normalize sales into a common shape
+
         const saleRows = sales.map(s => ({
             type: 'Sale',
             id: s.sale_id,
@@ -839,9 +994,8 @@ async function loadTransactions() {
             typeCss: 'type-sale',
         }));
 
-        // normalize acquisitions — trade-ins and regular acquisitions
         const acqRows = acquisitions.map(a => {
-            const isTradeIn = a.notes && a.notes.includes('Value:');    
+            const isTradeIn = a.notes && a.notes.includes('Value:');
             return {
                 type: isTradeIn ? 'Trade-In' : 'Acquisition',
                 id: a.acquisition_id,
@@ -857,7 +1011,6 @@ async function loadTransactions() {
             };
         });
 
-        // merge and sort by date, newest first
         const transRows = transactions.map(t => ({
             type: t.transaction_type,
             id: t.transaction_id,
@@ -870,42 +1023,21 @@ async function loadTransactions() {
             typeCss: 'type-acquisition',
         }));
 
-        const all = [...saleRows, ...acqRows, ...transRows].sort((a, b) => {
-            return new Date(b.date ?? 0) - new Date(a.date ?? 0);
-        });
+        transCache = [...saleRows, ...acqRows, ...transRows];
 
-
-        // update summary cards
         const totalRevenue = saleRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
         const totalSpend = acqRows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
         document.getElementById('transSummary').innerHTML = `
-            <div class="sum-card"><div class="sum-label">Total Records</div><div class="sum-val">${all.length}</div></div>
+            <div class="sum-card"><div class="sum-label">Total Records</div><div class="sum-val">${transCache.length}</div></div>
             <div class="sum-card"><div class="sum-label">Sales Revenue</div><div class="sum-val">$${totalRevenue.toLocaleString()}</div></div>
             <div class="sum-card"><div class="sum-label">Acquisitions / Trade-Ins</div><div class="sum-val">${acqRows.length}</div></div>
             <div class="sum-card"><div class="sum-label">Total Spend</div><div class="sum-val">$${totalSpend.toLocaleString()}</div></div>
         `;
 
-        if (!all.length) {
-            tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No records yet</div><div class="empty-sub">Sales, acquisitions, and trade-ins will appear here.</div></div></td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = all.map(r => `
-            <tr>
-                <td><span class="status ${r.typeCss}">${r.type}</span></td>
-                <td>${r.id}</td>
-                <td>${r.vehicle}</td>
-                <td class="vin">${r.vin}</td>
-                <td style="max-width:200px; font-size:12px; color:var(--muted);">${r.customerOrNotes}</td>
-                <td>${r.amount != null ? '$' + r.amount.toLocaleString() : '—'}</td>
-                <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
-                <td><span class="status s-${r.status?.toLowerCase()}">${r.status}</span></td>
-            </tr>
-        `).join('');
-
+        renderTransactions();
     } catch (err) {
         console.error('Failed to load transactions:', err.message);
-        tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+        document.getElementById('transactionsBody').innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
     }
 }
 
@@ -934,25 +1066,47 @@ async function advanceTransaction(id, currentStatus, newStatus) {
 }
 
 // ── My Sales ──────────────────────────────────────────
+function renderMySales() {
+    const salesCols = [
+        { key: 'sale_id', label: 'Sale ID' },
+        { key: 'vehicle', label: 'Vehicle' },
+        { key: 'vin', label: 'VIN' },
+        { key: 'customer', label: 'Customer' },
+        { key: 'amount', label: 'Amount' },
+        { key: 'date', label: 'Date' },
+        { key: 'status', label: 'Status' },
+    ];
+    document.getElementById('salesHead').innerHTML = `<tr>${salesCols.map(c =>
+        `<th style="cursor:pointer;user-select:none;" onclick="setSalesSort('${c.key}')">${c.label}${sortIcon(c.key, salesSortCol, salesSortDir)}</th>`
+    ).join('')}</tr>`;
+
+    let rows = sortRows(filterRows(mySalesCache, salesSearch, ['sale_id', 'vehicle', 'vin', 'customer', 'status']), salesSortCol, salesSortDir);
+
+    const tbody = document.getElementById('mysalesBody');
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">${salesSearch ? 'No matching sales' : 'No sales yet'}</div>${salesSearch ? '' : '<div class="empty-sub">Your sales will appear here once recorded.</div>'}</div></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = rows.map(s => `
+        <tr>
+            <td>${s.sale_id}</td>
+            <td>${s.vehicle}</td>
+            <td class="vin">${s.vin}</td>
+            <td>${s.customer}</td>
+            <td>${s.amount != null ? '$' + Number(s.amount).toLocaleString() : '—'}</td>
+            <td>${s.date ? new Date(s.date).toLocaleDateString() : '—'}</td>
+            <td><span class="status s-${String(s.status).toLowerCase()}">${s.status}</span></td>
+        </tr>
+    `).join('');
+}
+
 async function loadMySales() {
     const tbody = document.getElementById('mysalesBody');
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">Loading...</div></div></td></tr>`;
     try {
         const sales = await db.sales.getAll();
-        console.log('All sales:', sales);
-        console.log('Current user id:', currentUser.user_id, typeof currentUser.user_id);
-        console.log('First sale salesman_id:', sales[0]?.salesman_id, typeof sales[0]?.salesman_id);
         const mine = sales.filter(s => String(s.salesman_id) === String(currentUser.user_id));
-        if (!mine.length) {
-            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">&#9723;</div><div class="empty-title">No sales yet</div><div class="empty-sub">Your sales will appear here once recorded.</div></div></td></tr>`;
-            document.getElementById('mySalesSummary').innerHTML = `
-                <div class="sum-card"><div class="sum-label">My Total Sales</div><div class="sum-val">0</div></div>
-                <div class="sum-card"><div class="sum-label">My Revenue</div><div class="sum-val">$0</div></div>
-                <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">0</div></div>
-                <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">0</div></div>
-            `;
-            return;
-        }
+
         const total = mine.reduce((sum, s) => sum + (s.amount_sold ?? 0), 0);
         const finalized = mine.filter(s => s.status === 'Finalized').length;
         const pending = mine.filter(s => s.status === 'Pending').length;
@@ -962,17 +1116,20 @@ async function loadMySales() {
             <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">${finalized}</div></div>
             <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">${pending}</div></div>
         `;
-        tbody.innerHTML = mine.map(s => `
-            <tr>
-                <td>${s.sale_id}</td>
-                <td>${s.vehicle_inventory ? s.vehicle_inventory.year + ' ' + (s.vehicle_inventory.make ?? '') + ' ' + s.vehicle_inventory.model : '—'}</td>
-                <td class="vin">${s.vin ?? '—'}</td>
-                <td>${s.customer_records ? s.customer_records.customer_name : '—'}</td>
-                <td>${s.amount_sold != null ? '$' + s.amount_sold.toLocaleString() : '—'}</td>
-                <td>${s.date_time ? new Date(s.date_time).toLocaleDateString() : '—'}</td>
-                <td><span class="status s-${s.status?.toLowerCase()}">${s.status ?? '—'}</span></td>
-            </tr>
-        `).join('');
+
+        mySalesCache = mine.map(s => ({
+            sale_id: s.sale_id,
+            vehicle: s.vehicle_inventory
+                ? `${s.vehicle_inventory.year ?? ''} ${s.vehicle_inventory.make ?? ''} ${s.vehicle_inventory.model ?? ''}`.trim()
+                : '—',
+            vin: s.vin ?? '—',
+            customer: s.customer_records ? s.customer_records.customer_name : '—',
+            amount: s.amount_sold,
+            date: s.date_time,
+            status: s.status ?? '—',
+        }));
+
+        renderMySales();
     } catch (err) {
         console.error('Failed to load my sales:', err.message);
         tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">Failed to load sales</div><div class="empty-sub">${err.message}</div></div></td></tr>`;

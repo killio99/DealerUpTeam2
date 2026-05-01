@@ -198,9 +198,15 @@
       <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">—</div></div>
       <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
     </div>
+    <div class="toolbar" style="margin-bottom:12px;">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="transSearchInput" placeholder="Search transactions…" oninput="transSearch=this.value; renderTransactions()">
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead id="transHead">
           <tr>
             <th>Type</th>
             <th>ID</th>
@@ -385,9 +391,15 @@
         <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">—</div></div>
         <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">—</div></div>
       </div>
+      <div class="toolbar" style="margin-bottom:12px;">
+        <div class="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="acqSearchInput" placeholder="Search acquisitions…" oninput="acqSearch=this.value; renderAcquisitionsAdmin()">
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead>
+          <thead id="acqAdminPendingHead">
             <tr>
               <th>ID</th>
               <th>VIN</th>
@@ -415,7 +427,7 @@
       <div class="table-wrap" style="margin-top:16px;">
         <div style="padding:16px 18px; border-bottom:1px solid var(--border); font-weight:500; font-size:13px;">Approved Requests (View Only)</div>
         <table>
-          <thead>
+          <thead id="acqAdminApprovedHead">
             <tr>
               <th>ID</th>
               <th>VIN</th>
@@ -485,9 +497,15 @@
         <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">—</div></div>
       </div>
 
+      <div class="toolbar" style="margin-bottom:12px;">
+        <div class="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="acqEmpSearchInput" placeholder="Search acquisitions…" oninput="acqSearch=this.value; renderAcquisitionsEmployee()">
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead>
+          <thead id="acqEmployeeHead">
             <tr>
               <th>ID</th>
               <th>VIN</th>
@@ -525,14 +543,20 @@
       <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
     </div>
 
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-bottom:14px;">
-      <button class="btn-save" onclick="openSaleForm()">New Sale</button>
-      <button class="btn-sm" onclick="openDraftsModal()">View and Edit Drafts</button>
+    <div class="toolbar" style="margin-bottom:14px;">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="salesSearchInput" placeholder="Search sales…" oninput="salesSearch=this.value; renderMySales()">
+      </div>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn-save" onclick="openSaleForm()">New Sale</button>
+        <button class="btn-sm" onclick="openDraftsModal()">View and Edit Drafts</button>
+      </div>
     </div>
 
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead id="salesHead">
           <tr>
             <th>Sale ID</th>
             <th>Vehicle</th>
