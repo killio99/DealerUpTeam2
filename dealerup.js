@@ -20,11 +20,26 @@ function toggleDarkMode() {
 function enableDarkMode() {
     document.body.classList.add('dark-mode');
     localStorage.setItem('darkMode', 'true');
+    refreshChartColors();
 }
 
 function disableDarkMode() {
     document.body.classList.remove('dark-mode');
     localStorage.setItem('darkMode', 'false');
+    refreshChartColors();
+}
+
+function getStatusChartColors() {
+    return document.body.classList.contains('dark-mode')
+        ? ['#16a34a', '#ea580c']
+        : ['#15803d', '#c2410c'];
+}
+
+function refreshChartColors() {
+    if (_statusChart) {
+        _statusChart.data.datasets[0].backgroundColor = getStatusChartColors();
+        _statusChart.update();
+    }
 }
 
 // Initialize dark mode on page load
@@ -1749,7 +1764,7 @@ function renderStatusChart(inventoryData) {
         type: 'doughnut',
         data: {
             labels: ['Available', 'Pending'],
-            datasets: [{ data: [available, pending], backgroundColor: ['#3b6d11', '#854f0b'], borderWidth: 0 }]
+            datasets: [{ data: [available, pending], backgroundColor: getStatusChartColors(), borderWidth: 0 }]
         },
         options: {
             responsive: true,
