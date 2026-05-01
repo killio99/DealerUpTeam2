@@ -10,6 +10,66 @@
 </head>
 <body>
 
+<!-- ── Loading Screen ── -->
+<div id="loadingScreen" style="
+  position:fixed; inset:0; z-index:9999;
+  background:#0a1628;
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:20px;
+  transition: opacity 0.5s ease;
+">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="#4a7fe5">
+      <path d="M5 17H3V11L5.5 6H18.5L21 11V17H19C19 18.1 18.1 19 17 19C15.9 19 15 18.1 15 17H9C9 18.1 8.1 19 7 19C5.9 19 5 18.1 5 17ZM17 15.5C17.8 15.5 18.5 16.2 18.5 17C18.5 17.8 17.8 18.5 17 18.5C16.2 18.5 15.5 17.8 15.5 17C15.5 16.2 16.2 15.5 17 15.5ZM7 15.5C7.8 15.5 8.5 16.2 8.5 17C8.5 17.8 7.8 18.5 7 18.5C6.2 18.5 5.5 17.8 5.5 17C5.5 16.2 6.2 15.5 7 15.5ZM6.2 10H17.8L16.2 7H7.8L6.2 10Z"/>
+    </svg>
+    <span style="color:#fff; font-family:'IBM Plex Sans',sans-serif; font-size:22px; font-weight:500; letter-spacing:0.01em;">DealerUp</span>
+  </div>
+  <div style="width:160px; height:3px; background:#1e2f4a; border-radius:99px; overflow:hidden;">
+    <div id="loadingBar" style="height:100%; width:0%; background:#4a7fe5; border-radius:99px; transition:width 0.4s ease;"></div>
+  </div>
+  <div style="color:#5a7a9a; font-family:'IBM Plex Sans',sans-serif; font-size:13px;" id="loadingText">Starting up...</div>
+</div>
+
+<script>
+  (function() {
+    let _loaderRunning = false;
+    window.__dismissLoader = function() {
+      if (_loaderRunning) return;
+      _loaderRunning = true;
+      const bar = document.getElementById('loadingBar');
+      const text = document.getElementById('loadingText');
+      const screen = document.getElementById('loadingScreen');
+      const steps = [
+        [15, 'Connecting...'],
+        [45, 'Loading inventory...'],
+        [75, 'Setting up workspace...'],
+        [95, 'Almost ready...'],
+      ];
+      let i = 0;
+      function next() {
+        if (i >= steps.length) return;
+        bar.style.width = steps[i][0] + '%';
+        text.textContent = steps[i][1];
+        i++;
+        if (i < steps.length) setTimeout(next, 250);
+      }
+      next();
+      setTimeout(function() {
+        bar.style.width = '100%';
+        text.textContent = 'Ready!';
+        setTimeout(function() {
+          screen.style.opacity = '0';
+          setTimeout(function() {
+            screen.style.display = 'none';
+            _loaderRunning = false;
+          }, 500);
+        }, 300);
+      }, steps.length * 200 + 150);
+    };
+  })();
+</script>
+
 <!-- ── Login Screen ── -->
 <div class="login-wrap" id="loginScreen">
   <div class="login-card">
@@ -81,6 +141,8 @@
     <button class="tab-btn" onclick="switchTab('mysales')">My Sales</button>
     <button class="tab-btn" onclick="switchTab('transactions')">Transactions</button>
     <button class="tab-btn" onclick="switchTab('tradein')">Trade-In</button>
+    <button class="tab-btn" id="usersTabBtn" style="display:none;" onclick="switchTab('users')">Users</button>
+    <button class="tab-btn" id="customersTabBtn" style="display:none;" onclick="switchTab('customers')">Customers</button>
   </nav>
 
   <!-- ── Inventory Page ── -->
@@ -112,7 +174,6 @@
         <option value="">All statuses</option>
         <option value="Available">Available</option>
         <option value="Pending">Pending</option>
-        <option value="Sold">Sold</option>
       </select>
       <button class="btn-sm" onclick="clearFilters()">Clear filters</button>
     </div>
@@ -154,9 +215,15 @@
       <div class="sum-card"><div class="sum-label">Finalized</div><div class="sum-val">—</div></div>
       <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
     </div>
+    <div class="toolbar" style="margin-bottom:12px;">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="transSearchInput" placeholder="Search transactions…" oninput="transSearch=this.value; renderTransactions()">
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead id="transHead">
           <tr>
             <th>Type</th>
             <th>ID</th>
@@ -220,7 +287,7 @@
     <!-- Second row -->
     <div class="summary" style="grid-template-columns: repeat(3, 1fr); margin-bottom:32px;">
       <div class="sum-card">
-        <div class="sum-label">Pending Sales</div>
+        <div class="sum-label">Pending Vehicles</div>
         <div class="sum-val" id="dashPending">—</div>
       </div>
       <div class="sum-card">
@@ -341,9 +408,15 @@
         <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">—</div></div>
         <div class="sum-card"><div class="sum-label">Denied</div><div class="sum-val">—</div></div>
       </div>
+      <div class="toolbar" style="margin-bottom:12px;">
+        <div class="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="acqSearchInput" placeholder="Search acquisitions…" oninput="acqSearch=this.value; renderAcquisitionsAdmin()">
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead>
+          <thead id="acqAdminPendingHead">
             <tr>
               <th>ID</th>
               <th>VIN</th>
@@ -371,7 +444,7 @@
       <div class="table-wrap" style="margin-top:16px;">
         <div style="padding:16px 18px; border-bottom:1px solid var(--border); font-weight:500; font-size:13px;">Approved Requests (View Only)</div>
         <table>
-          <thead>
+          <thead id="acqAdminApprovedHead">
             <tr>
               <th>ID</th>
               <th>VIN</th>
@@ -397,8 +470,15 @@
     </div>
 
     <div id="acqEmployeeView" style="display:none;">
-      <div class="table-wrap" style="padding:24px; margin-bottom:20px;">
-        <div style="font-size:13px; font-weight:500; margin-bottom:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Create Acquisition Request</div>
+      <div style="display:flex; justify-content:flex-start; margin-bottom:12px;">
+        <button class="btn-add" id="acqRequestToggleBtn" onclick="toggleAcquisitionRequestForm()" style="padding:6px 10px; font-size:12px;">Create Acquisition Request +</button>
+      </div>
+
+      <div class="table-wrap" id="acqRequestFormWrap" style="display:none; padding:24px; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px;">
+          <div style="font-size:13px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Create Acquisition Request</div>
+          <button class="btn-cancel" onclick="toggleAcquisitionRequestForm()">Close</button>
+        </div>
         <div class="form-grid">
           <div class="full">
             <label>VIN</label>
@@ -434,9 +514,15 @@
         <div class="sum-card"><div class="sum-label">Approved</div><div class="sum-val">—</div></div>
       </div>
 
+      <div class="toolbar" style="margin-bottom:12px;">
+        <div class="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="acqEmpSearchInput" placeholder="Search acquisitions…" oninput="acqSearch=this.value; renderAcquisitionsEmployee()">
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead>
+          <thead id="acqEmployeeHead">
             <tr>
               <th>ID</th>
               <th>VIN</th>
@@ -474,14 +560,20 @@
       <div class="sum-card"><div class="sum-label">Pending</div><div class="sum-val">—</div></div>
     </div>
 
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-bottom:14px;">
-      <button class="btn-save" onclick="openSaleForm()">New Sale</button>
-      <button class="btn-sm" onclick="openDraftsModal()">View and Edit Drafts</button>
+    <div class="toolbar" style="margin-bottom:14px;">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="salesSearchInput" placeholder="Search sales…" oninput="salesSearch=this.value; renderMySales()">
+      </div>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn-save" onclick="openSaleForm()">New Sale</button>
+        <button class="btn-sm" onclick="openDraftsModal()">View and Edit Drafts</button>
+      </div>
     </div>
 
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead id="salesHead">
           <tr>
             <th>Sale ID</th>
             <th>Vehicle</th>
@@ -645,7 +737,98 @@
     </div>
   </div>
 
-  <!-- ── Add / Edit Modal ── -->
+  <!-- ── Users Page ── -->
+  <div class="page" id="usersPage" style="display:none; padding: 28px 24px; max-width:900px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Users</div>
+      <button class="btn-add" onclick="openCreateUserModal()">+ Create User</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersBody">
+          <tr>
+            <td colspan="3">Loading users...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Customers Page ── -->
+  <div class="page" id="customersPage" style="display:none; padding: 28px 24px; max-width:1100px; width:100%; margin: 0 auto;">
+    <div class="page-hdr">
+      <div class="page-title">Customer Records</div>
+    </div>
+    <div class="summary" style="margin-bottom:20px;">
+      <div class="sum-card"><div class="sum-label">Total Customers</div><div class="sum-val" id="statCustomersTotal">—</div></div>
+      <div class="sum-card"><div class="sum-label">With Balance</div><div class="sum-val" id="statCustomersOwed">—</div></div>
+      <div class="sum-card"><div class="sum-label">With Phone</div><div class="sum-val" id="statCustomersPhone">—</div></div>
+    </div>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="customerSearchInput" placeholder="Search by name or phone…" oninput="renderCustomersTable()" />
+      </div>
+      <button class="btn-sm" onclick="document.getElementById('customerSearchInput').value=''; renderCustomersTable()">Clear</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Amount Owed</th>
+            <th>VIN</th>
+          </tr>
+        </thead>
+        <tbody id="customersBody">
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <div class="empty-icon">&#9723;</div>
+                <div class="empty-title">Loading customers...</div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+  <div class="modal-backdrop" id="createUserModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-title">Create User</div>
+
+    <label>Username</label>
+    <input type="text" id="newUsername" placeholder="username" />
+
+    <label>Password</label>
+    <input type="password" id="newPassword" placeholder="password" />
+
+    <label>Role</label>
+    <select id="newUserRole">
+      <option value="employee">Employee</option>
+      <option value="admin">Admin</option>
+    </select>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCreateUserModal()">Cancel</button>
+      <button class="btn-save" onclick="createUser()">Create</button>
+    </div>
+  </div>
+</div>
+
   <div class="modal-backdrop" id="modal">
     <div class="modal">
       <div class="modal-title" id="modalTitle">Add vehicle</div>
@@ -680,7 +863,6 @@
           <select id="fStatus">
             <option>Available</option>
             <option>Pending</option>
-            <option>Sold</option>
           </select>
         </div>
       </div>
